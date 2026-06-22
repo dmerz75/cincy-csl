@@ -2,7 +2,7 @@
 Persists results to `cincy_csl.db` in the project root.
 """
 import random
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import create_engine
 
 from cincy_csl.api.schedule import round_robin, schedule_dates
@@ -68,7 +68,7 @@ def main(db_path: str = "sqlite:///cincy_csl.db"):
     team_names = [t.name for t in teams]
     rounds = generate_rounds_for_n(team_names, 8)
     # Align start date to league day_of_week
-    start = align_to_weekday(datetime.utcnow(), league.day_of_week)
+    start = align_to_weekday(datetime.now(timezone.utc), league.day_of_week)
     dates = schedule_dates(start, len(rounds), interval_days=7)
 
     matches_to_save = []

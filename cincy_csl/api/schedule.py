@@ -4,7 +4,7 @@ This is a lightweight reference implementation for local testing. In production,
 this logic should be placed in a serverless function or backend service and
 use the real DB models.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Tuple
 
 
@@ -39,10 +39,25 @@ def schedule_dates(start_date: datetime, rounds: int, interval_days: int = 7) ->
     return [start_date + timedelta(days=i * interval_days) for i in range(rounds)]
 
 
+def generate_rounds_for_n(teams: List[str], n_rounds: int) -> List[List[Tuple[str, str]]]:
+    """Generate exactly `n_rounds` rounds by cycling the base round-robin and flipping match order each cycle."""
+    base = round_robin(teams)
+    rounds = []
+    i = 0
+    while len(rounds) < n_rounds:
+        r = base[i % len(base)]
+        cycle = i // len(base)
+        if cycle % 2 == 1:
+            r = [(b, a) for (a, b) in r]
+        rounds.append(r)
+        i += 1
+    return rounds
+
+
 if __name__ == "__main__":
     teams = ["Spikers", "Block Party", "Net Results", "Volley Llamas", "Set To Kill"]
     rounds = round_robin(teams)
-    dates = schedule_dates(datetime.utcnow(), len(rounds))
+    dates = schedule_dates(datetime.now(timezone.utc), len(rounds))
 
     for rd, date in zip(rounds, dates):
         print(f"Round on {date.isoformat()}:")

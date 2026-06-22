@@ -1,5 +1,5 @@
 """Demo: generate schedule for Monday-C1-Coed, define court availabilities, and assign matches to slots using OR-Tools."""
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 from sqlalchemy import create_engine
 
 from cincy_csl.api.db import (
@@ -31,7 +31,7 @@ def expand_recurring_availabilities(session, league, start_date, weeks=8):
             slot_date = base + timedelta(days=days_ahead)
             # parse start_time
             hh, mm = map(int, ca.start_time.split(":"))
-            dt = datetime(slot_date.year, slot_date.month, slot_date.day, hh, mm)
+            dt = datetime(slot_date.year, slot_date.month, slot_date.day, hh, mm, tzinfo=timezone.utc)
             slots.append((slot_id, dt, ca.court_id))
             slot_id += 1
     return slots
@@ -69,7 +69,7 @@ def main(db_path: str = "sqlite:///cincy_csl.db"):
     # build rounds from teams in league
     teams = [t.name for t in session.query(Team).filter_by(league_id=league.id).all()]
     rounds = generate_rounds_for_n(teams, 8)
-    start = datetime.utcnow()
+    start = datetime.now(timezone.utc)
     dates = schedule_dates(start, len(rounds), interval_days=7)
 
     matches = []

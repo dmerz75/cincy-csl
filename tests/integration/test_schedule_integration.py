@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -33,7 +33,7 @@ def test_round_robin_and_db_persistence_and_notifications(in_memory_session):
     rounds = round_robin(teams)
     assert len(rounds) == len(teams) - 1
 
-    dates = schedule_dates(datetime.utcnow(), len(rounds))
+    dates = schedule_dates(datetime.now(timezone.utc), len(rounds))
 
     matches_to_save = []
     for rd, dt in zip(rounds, dates):

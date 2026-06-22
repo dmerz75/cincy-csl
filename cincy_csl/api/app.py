@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from cincy_csl.api.db import get_session, create_slots_from_availabilities
 from cincy_csl.api.schedule import generate_rounds_for_n, schedule_dates
@@ -34,7 +34,7 @@ def preview_schedule(req: PreviewRequest):
         raise HTTPException(status_code=400, detail="No teams in league")
 
     rounds = generate_rounds_for_n(teams, req.weeks)
-    start = req.start_date or datetime.now()
+    start = req.start_date or datetime.now(timezone.utc)
     dates = schedule_dates(start, len(rounds), interval_days=7)
 
     # build matches list
@@ -51,12 +51,12 @@ def preview_schedule(req: PreviewRequest):
     cas = session.query(CourtAvailability).filter(CourtAvailability.recurring == 1).all()
     slot_id = 1
     for week in range(req.weeks):
-        base = start + (week * 7)
+        base = start + timedelta(weeks=week)
         for ca in cas:
             days_ahead = (ca.weekday - base.weekday()) % 7
             slot_date = base + timedelta(days=days_ahead)
             hh, mm = map(int, ca.start_time.split(":"))
-            dt = datetime(slot_date.year, slot_date.month, slot_date.day, hh, mm)
+            dt = datetime(slot_date.year, slot_date.month, slot_date.day, hh, mm, tzinfo=timezone.utc)
             slots.append((slot_id, dt, ca.court_id))
             slot_id += 1
 
