@@ -19,10 +19,7 @@ from cincy_csl.api.allocator import assign_matches
 def expand_recurring_availabilities(session, league, start_date, weeks=8):
     # build slot list as tuples (slot_id, datetime, court_id)
     slots = []
-    # read all court and availabilities
-    courts = {c.id: c for c in session.query("Court").all()}  # placeholder, we'll query availabilities instead
     from cincy_csl.api.db import CourtAvailability, Court
-
     court_map = {c.id: c for c in session.query(Court).all()}
     cas = session.query(CourtAvailability).filter(CourtAvailability.recurring == 1).all()
     slot_id = 1
@@ -46,7 +43,9 @@ def main(db_path: str = "sqlite:///cincy_csl.db"):
     session = get_session(engine)
 
     # assume league + teams + players created by create_practice_league
-    league = session.query("League").first()
+    from cincy_csl.api.db import League, Team, Court, CourtAvailability
+
+    league = session.query(League).first()
     if not league:
         print("No league found. Run create_practice_league.py first.")
         return
@@ -68,7 +67,7 @@ def main(db_path: str = "sqlite:///cincy_csl.db"):
     create_court_availability(session, court7, weekday=league.day_of_week, start_time="22:00", end_time="23:00", recurring=True)
 
     # build rounds from teams in league
-    teams = [t.name for t in session.query("Team").filter_by(league_id=league.id).all()]
+    teams = [t.name for t in session.query(Team).filter_by(league_id=league.id).all()]
     rounds = generate_rounds_for_n(teams, 8)
     start = datetime.utcnow()
     dates = schedule_dates(start, len(rounds), interval_days=7)

@@ -2,3 +2,5 @@ pytest
 sqlalchemy
 alembic
 ortools
+fastapi
+uvicorn[standard]

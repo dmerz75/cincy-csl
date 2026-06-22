@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Tuple
 
 from sqlalchemy import (
@@ -28,9 +28,10 @@ class Match(Base):
     id = Column(Integer, primary_key=True)
     home_team_id = Column(Integer, ForeignKey("teams.id"), nullable=False)
     away_team_id = Column(Integer, ForeignKey("teams.id"), nullable=False)
-    datetime = Column(DateTime, nullable=False)
+    datetime = Column(DateTime(timezone=True), nullable=True)
     court = Column(String, nullable=True)
     status = Column(String, default="scheduled")
+    court_id = Column(Integer, ForeignKey("courts.id"), nullable=True)
 
     home_team = relationship("Team", foreign_keys=[home_team_id])
     away_team = relationship("Team", foreign_keys=[away_team_id])
@@ -70,6 +71,16 @@ class CourtAvailability(Base):
     start_time = Column(String, nullable=False)  # HH:MM
     end_time = Column(String, nullable=False)    # HH:MM
     recurring = Column(Integer, default=1)  # 1=true, 0=false
+
+    court = relationship("Court", foreign_keys=[court_id])
+
+
+class Slot(Base):
+    __tablename__ = "slots"
+    id = Column(Integer, primary_key=True)
+    court_id = Column(Integer, ForeignKey("courts.id"), nullable=False)
+    datetime = Column(DateTime(timezone=True), nullable=False)
+    available = Column(Integer, default=1)
 
     court = relationship("Court", foreign_keys=[court_id])
 
@@ -121,6 +132,58 @@ def create_court_availability(session, court: Court, weekday: int, start_time: s
     session.commit()
     session.refresh(ca)
     return ca
+
+
+def create_slot(session, court: Court, dt: datetime) -> Slot:
+    s = Slot(court_id=court.id, datetime=dt)
+    session.add(s)
+    session.commit()
+    session.refresh(s)
+    return s
+
+
+def create_slots_from_availabilities(session, start_date: datetime, weeks: int = 8):
+    """Expand recurring `CourtAvailability` rows into concrete `Slot` rows for `weeks` weeks starting at `start_date`."""
+    from datetime import timedelta
+    cas = session.query(CourtAvailability).filter(CourtAvailability.recurring == 1).all()
+    slots = []
+    for week in range(weeks):
+        base = start_date + timedelta(weeks=week)
+        for ca in cas:
+            days_ahead = (ca.weekday - base.weekday()) % 7
+            slot_date = base + timedelta(days=days_ahead)
+            hh, mm = map(int, ca.start_time.split(":"))
+            dt = datetime(slot_date.year, slot_date.month, slot_date.day, hh, mm, tzinfo=timezone.utc)
+            s = create_slot(session, session.get(Court, ca.court_id), dt)
+            slots.append(s)
+    return slots
+
+
+def create_match(session, home_name: str, away_name: str):
+    """Create a Match row without datetime/court (to be assigned later)."""
+    name_to_team = {t.name: t for t in session.query(Team).all()}
+    home = name_to_team.get(home_name)
+    away = name_to_team.get(away_name)
+    if not home or not away:
+        raise ValueError("Team not found when creating match")
+    m = Match(home_team_id=home.id, away_team_id=away.id, datetime=None, court=None, status="pending")
+    session.add(m)
+    session.commit()
+    session.refresh(m)
+    return m
+
+
+def persist_assignments(session, assignments: dict):
+    """Given assignments mapping match_id -> slot_id, update Match rows with slot datetime and court_id."""
+    for mid, sid in assignments.items():
+        m = session.get(Match, mid)
+        if sid is None:
+            continue
+        s = session.get(Slot, sid)
+        m.datetime = s.datetime
+        m.court_id = s.court_id
+        m.court = s.court.name if s.court else None
+    session.commit()
 
 
 def create_player(session, team: Team, first_name: str, last_name: str = None, phone: str = None, email: str = None) -> Player:

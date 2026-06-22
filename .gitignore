@@ -13,3 +13,7 @@ build/
 
 # macOS
 .DS_Store
+
+# Database
+*.db
+cincy_csl.db
