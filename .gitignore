@@ -1,0 +1,15 @@
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+
+# Env / secrets
+.env
+
+# Node/build (if later)
+node_modules/
+build/
+
+# macOS
+.DS_Store
