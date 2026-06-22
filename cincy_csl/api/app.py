@@ -19,7 +19,8 @@ from fastapi import Query
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
-app = FastAPI(title="Cincy CSL Admin API")
+_debug_mode = os.getenv("ENABLE_DEBUG_EXCEPTIONS", "false").lower() in ("1", "true", "yes")
+app = FastAPI(title="Cincy CSL Admin API", debug=_debug_mode)
 
 # Development CORS: allow the React dev server to call the preview API
 app.add_middleware(
