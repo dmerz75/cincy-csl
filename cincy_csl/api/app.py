@@ -3,6 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timedelta, timezone
+import os
+import ipaddress
+from starlette.requests import Request
 
 from cincy_csl.api.db import get_session, create_slots_from_availabilities
 from cincy_csl.api.schedule import generate_rounds_for_n, schedule_dates
@@ -26,6 +29,55 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Optional IP-whitelist: set `TRUSTED_RENDER_IPS` as a comma-separated
+# list of CIDRs or individual IPs (e.g. "74.220.48.0/24,216.151.17.91").
+# When empty, no IP restriction is applied (useful for local development).
+_trusted = os.getenv("TRUSTED_RENDER_IPS", "").strip()
+_allowed_networks = []
+if _trusted:
+    for _s in _trusted.split(","):
+        s = _s.strip()
+        if not s:
+            continue
+        try:
+            _allowed_networks.append(ipaddress.ip_network(s))
+        except ValueError:
+            # try treating as single IP
+            try:
+                _allowed_networks.append(ipaddress.ip_network(s + "/32"))
+            except ValueError:
+                pass
+
+
+@app.middleware("http")
+async def ip_whitelist_middleware(request: Request, call_next):
+    # If no networks configured, allow all
+    if not _allowed_networks:
+        return await call_next(request)
+
+    # Prefer X-Forwarded-For from trusted proxies (Render sets this)
+    xff = request.headers.get("x-forwarded-for")
+    client_ip = None
+    if xff:
+        client_ip = xff.split(",")[0].strip()
+    else:
+        client_ip = request.client.host
+
+    try:
+        ip_obj = ipaddress.ip_address(client_ip)
+    except Exception:
+        from fastapi.responses import Response
+
+        return Response(status_code=400, content="Invalid client IP")
+
+    allowed = any(ip_obj in net for net in _allowed_networks)
+    if not allowed:
+        from fastapi.responses import Response
+
+        return Response(status_code=403, content="Forbidden")
+
+    return await call_next(request)
 
 # If a built React app exists at web/dist, serve it at /admin (static)
 dist_dir = Path(__file__).parents[2] / "web" / "dist"
