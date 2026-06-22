@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timedelta, timezone
@@ -7,9 +8,29 @@ from cincy_csl.api.db import get_session, create_slots_from_availabilities
 from cincy_csl.api.schedule import generate_rounds_for_n, schedule_dates
 from cincy_csl.api.allocator import assign_matches
 from sqlalchemy import create_engine
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
+from typing import Optional
+import io
+import csv
+from fastapi import Query
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 
 app = FastAPI(title="Cincy CSL Admin API")
+
+# Development CORS: allow the React dev server to call the preview API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# If a built React app exists at web/dist, serve it at /admin (static)
+dist_dir = Path(__file__).parents[2] / "web" / "dist"
+if dist_dir.exists():
+    app.mount("/admin", StaticFiles(directory=str(dist_dir), html=True), name="admin")
 
 
 class PreviewRequest(BaseModel):
@@ -83,8 +104,153 @@ def preview_schedule(req: PreviewRequest):
     return result
 
 
-@app.get("/admin", response_class=HTMLResponse)
-def admin_ui():
+@app.get("/admin/export_csv")
+def export_csv(league_id: int, day: Optional[int] = None):
+    """Export matches for a league as CSV. `day` is optional and should be 0..6 (JavaScript-style: 0=Sunday..6=Saturday).
+    If `day` is provided it'll filter matches to that weekday (UTC)."""
+    engine = create_engine("sqlite:///cincy_csl.db")
+    session = get_session(engine)
+
+    from cincy_csl.api.db import Match, Team
+
+    # get matches for the league (using home team association)
+    matches = (
+        session.query(Match)
+        .join(Team, Match.home_team)
+        .filter(Team.league_id == league_id)
+        .filter(Match.datetime != None)
+        .all()
+    )
+
+    if not matches:
+        raise HTTPException(status_code=404, detail="No matches found for that league")
+
+    # If day filter provided, convert JS weekday (0=Sun..6=Sat) to Python weekday (0=Mon..6=Sun)
+    if day is not None:
+        py_wd = (int(day) + 6) % 7
+        matches = [m for m in matches if m.datetime is not None and m.datetime.weekday() == py_wd]
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["match_id", "date", "time", "datetime", "home_team", "away_team", "court", "court_id"])
+
+    for m in matches:
+        dt = m.datetime
+        if dt:
+            iso = dt.isoformat()
+            date = dt.date().isoformat()
+            time = dt.time().isoformat()
+        else:
+            iso = ""
+            date = ""
+            time = ""
+        # resolve team names
+        home = session.get(Team, m.home_team_id).name if m.home_team_id else ""
+        away = session.get(Team, m.away_team_id).name if m.away_team_id else ""
+        writer.writerow([m.id, date, time, iso, home, away, m.court or "", m.court_id or ""])
+
+    buf.seek(0)
+    filename = f"league_{league_id}_matches.csv"
+    headers = {"Content-Disposition": f"attachment; filename=\"{filename}\""}
+    return Response(content=buf.getvalue(), media_type="text/csv", headers=headers)
+
+
+@app.get("/admin/leagues")
+def list_leagues():
+    engine = create_engine("sqlite:///cincy_csl.db")
+    session = get_session(engine)
+    from cincy_csl.api.db import League
+
+    leagues = session.query(League).all()
+    return [
+        {"id": l.id, "name": l.name, "day_of_week": l.day_of_week, "division": l.division}
+        for l in leagues
+    ]
+
+
+@app.get("/admin/teams")
+def list_teams(league_id: Optional[int] = Query(None)):
+    engine = create_engine("sqlite:///cincy_csl.db")
+    session = get_session(engine)
+    from cincy_csl.api.db import Team
+
+    q = session.query(Team)
+    if league_id is not None:
+        q = q.filter(Team.league_id == int(league_id))
+    teams = q.all()
+    return [
+        {"id": t.id, "name": t.name, "captain_phone": t.captain_phone, "contact_email": t.contact_email, "league_id": t.league_id}
+        for t in teams
+    ]
+
+
+@app.get("/admin/schedules")
+def get_schedules(league_id: int, day: Optional[int] = Query(None)):
+    """Return persisted matches for a league. Optional `day` filters by JS weekday 0=Sun..6=Sat."""
+    engine = create_engine("sqlite:///cincy_csl.db")
+    session = get_session(engine)
+    from cincy_csl.api.db import Match, Team
+
+    # fetch matches where the home team belongs to the league
+    matches = (
+        session.query(Match)
+        .join(Team, Match.home_team)
+        .filter(Team.league_id == int(league_id))
+        .all()
+    )
+
+    if day is not None:
+        py_wd = (int(day) + 6) % 7
+        matches = [m for m in matches if m.datetime is not None and m.datetime.weekday() == py_wd]
+
+    out = []
+    for m in matches:
+        home = session.get(Team, m.home_team_id).name if m.home_team_id else None
+        away = session.get(Team, m.away_team_id).name if m.away_team_id else None
+        out.append({
+            "id": m.id,
+            "home_team_id": m.home_team_id,
+            "away_team_id": m.away_team_id,
+            "home": home,
+            "away": away,
+            "datetime": m.datetime.isoformat() if m.datetime else None,
+            "court": m.court,
+            "court_id": m.court_id,
+            "status": m.status,
+        })
+
+    return out
+
+
+# Duplicate API routes under /api/admin to avoid conflicts when static files are mounted at /admin
+@app.get("/api/admin/leagues")
+def api_list_leagues():
+    return list_leagues()
+
+
+@app.get("/api/admin/teams")
+def api_list_teams(league_id: Optional[int] = Query(None)):
+    return list_teams(league_id)
+
+
+@app.get("/api/admin/schedules")
+def api_get_schedules(league_id: int, day: Optional[int] = Query(None)):
+    return get_schedules(league_id, day)
+
+
+@app.get("/api/admin/export_csv")
+def api_export_csv(league_id: int, day: Optional[int] = None):
+    return export_csv(league_id, day)
+
+
+@app.post("/api/admin/preview_schedule")
+def api_preview_schedule(req: PreviewRequest):
+    return preview_schedule(req)
+
+
+if not dist_dir.exists():
+    @app.get("/admin", response_class=HTMLResponse)
+    def admin_ui():
         html = """
         <!doctype html>
         <html>
