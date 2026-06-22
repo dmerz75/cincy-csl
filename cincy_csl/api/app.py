@@ -7,6 +7,7 @@ from cincy_csl.api.db import get_session, create_slots_from_availabilities
 from cincy_csl.api.schedule import generate_rounds_for_n, schedule_dates
 from cincy_csl.api.allocator import assign_matches
 from sqlalchemy import create_engine
+from fastapi.responses import HTMLResponse
 
 app = FastAPI(title="Cincy CSL Admin API")
 
@@ -80,3 +81,69 @@ def preview_schedule(req: PreviewRequest):
             result["assigned"].append({**entry, "datetime": s[1].isoformat(), "court_id": s[2]})
 
     return result
+
+
+@app.get("/admin", response_class=HTMLResponse)
+def admin_ui():
+        html = """
+        <!doctype html>
+        <html>
+        <head>
+            <meta charset="utf-8" />
+            <title>Cincy CSL Admin - Schedule Preview</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; }
+                table { border-collapse: collapse; width: 100%; margin-top: 12px }
+                th, td { border: 1px solid #ddd; padding: 8px }
+                th { background: #f4f4f4 }
+            </style>
+        </head>
+        <body>
+            <h1>Schedule Preview</h1>
+            <form id="previewForm">
+                <label>League ID: <input id="league" type="number" value="1" /></label>
+                <label style="margin-left:12px">Weeks: <input id="weeks" type="number" value="8" /></label>
+                <button type="submit">Preview</button>
+            </form>
+            <div id="output"></div>
+
+            <script>
+                const form = document.getElementById('previewForm');
+                const out = document.getElementById('output');
+                form.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    out.innerHTML = 'Loading...';
+                    const league = document.getElementById('league').value;
+                    const weeks = document.getElementById('weeks').value;
+                    const resp = await fetch('/admin/preview_schedule', {
+                        method: 'POST', headers: {'Content-Type':'application/json'},
+                        body: JSON.stringify({league_id: Number(league), weeks: Number(weeks)})
+                    });
+                    if (!resp.ok) {
+                        out.innerText = 'Error: ' + resp.statusText;
+                        return;
+                    }
+                    const data = await resp.json();
+                    // render assigned
+                    let html = '';
+                    html += '<h2>Assigned Matches</h2>';
+                    html += '<table><thead><tr><th>ID</th><th>Home</th><th>Away</th><th>Date/Time</th><th>Court</th></tr></thead><tbody>';
+                    for (const a of data.assigned) {
+                        html += `<tr><td>${a.id}</td><td>${a.home}</td><td>${a.away}</td><td>${a.datetime}</td><td>${a.court_id}</td></tr>`;
+                    }
+                    html += '</tbody></table>';
+                    if (data.unassigned && data.unassigned.length) {
+                        html += '<h2>Unassigned Matches</h2>';
+                        html += '<table><thead><tr><th>ID</th><th>Home</th><th>Away</th></tr></thead><tbody>';
+                        for (const u of data.unassigned) {
+                            html += `<tr><td>${u.id}</td><td>${u.home}</td><td>${u.away}</td></tr>`;
+                        }
+                        html += '</tbody></table>';
+                    }
+                    out.innerHTML = html;
+                });
+            </script>
+        </body>
+        </html>
+        """
+        return HTMLResponse(content=html)
