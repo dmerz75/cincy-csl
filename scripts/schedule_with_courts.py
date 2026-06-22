@@ -72,19 +72,27 @@ def main(db_path: str = "sqlite:///cincy_csl.db"):
     start = datetime.now(timezone.utc)
     dates = schedule_dates(start, len(rounds), interval_days=7)
 
+    # persist matches to DB (pending)
+    from cincy_csl.api.db import Match, Slot, create_match, create_slots_from_availabilities, persist_assignments, Court
+
     matches = []
-    mid = 1
+    # create Match rows and collect their ids
     for rd, dt in zip(rounds, dates):
         for a, b in rd:
-            matches.append((mid, a, b))
-            mid += 1
+            m = create_match(session, a, b)
+            matches.append((m.id, a, b))
 
-    slots = expand_recurring_availabilities(session, league, dates[0], weeks=8)
+    # create concrete Slot rows from recurring availabilities
+    slots_rows = create_slots_from_availabilities(session, dates[0], weeks=8)
+    slots = [(s.id, s.datetime, s.court_id) for s in slots_rows]
 
+    # run allocator
     assignments = assign_matches(matches, slots)
 
+    # persist assignments back to Match rows
+    persist_assignments(session, assignments)
+
     # print assignments
-    from cincy_csl.api.db import Court
     court_map = {c.id: c for c in session.query(Court).all()}
     for m in matches:
         mid = m[0]
@@ -93,7 +101,7 @@ def main(db_path: str = "sqlite:///cincy_csl.db"):
             print(f"Match {mid} {m[1]} vs {m[2]} UNASSIGNED")
         else:
             s = next(s for s in slots if s[0] == slot)
-            print(f"Match {mid} {m[1]} vs {m[2]} -> {s[1]} on {court_map[s[2]].name}")
+            print(f"Match {mid} {m[1]} vs {m[2]} -> {s[1].isoformat()} on {court_map[s[2]].name}")
 
 
 if __name__ == "__main__":
