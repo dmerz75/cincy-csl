@@ -20,6 +20,7 @@ class Team(Base):
     name = Column(String, unique=True, nullable=False)
     captain_phone = Column(String, nullable=True)
     contact_email = Column(String, nullable=True)
+    league_id = Column(Integer, ForeignKey("leagues.id"), nullable=True)
 
 
 class Match(Base):
@@ -33,6 +34,26 @@ class Match(Base):
 
     home_team = relationship("Team", foreign_keys=[home_team_id])
     away_team = relationship("Team", foreign_keys=[away_team_id])
+
+
+class Player(Base):
+    __tablename__ = "players"
+    id = Column(Integer, primary_key=True)
+    team_id = Column(Integer, ForeignKey("teams.id"), nullable=False)
+    first_name = Column(String, nullable=False)
+    last_name = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+
+    team = relationship("Team", foreign_keys=[team_id])
+
+
+class League(Base):
+    __tablename__ = "leagues"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    day_of_week = Column(Integer, nullable=False)  # 0=Monday .. 6=Sunday
+    division = Column(String, nullable=True)
 
 
 def init_db(engine):
@@ -50,6 +71,30 @@ def create_team(session, name: str, captain_phone: str = None, contact_email: st
     session.commit()
     session.refresh(t)
     return t
+
+
+def create_league(session, name: str, day_of_week: int, division: str = None) -> League:
+    l = League(name=name, day_of_week=day_of_week, division=division)
+    session.add(l)
+    session.commit()
+    session.refresh(l)
+    return l
+
+
+def create_team(session, name: str, captain_phone: str = None, contact_email: str = None, league_id: int = None) -> Team:
+    t = Team(name=name, captain_phone=captain_phone, contact_email=contact_email, league_id=league_id)
+    session.add(t)
+    session.commit()
+    session.refresh(t)
+    return t
+
+
+def create_player(session, team: Team, first_name: str, last_name: str = None, phone: str = None, email: str = None) -> Player:
+    p = Player(team_id=team.id, first_name=first_name, last_name=last_name, phone=phone, email=email)
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+    return p
 
 
 def save_matches(session, matches: List[Tuple[str, str, datetime, str]]):
