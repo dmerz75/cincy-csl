@@ -1,0 +1,7 @@
+Add startup scripts for backend and frontend; add Makefile targets start-back and start-front
+
+Files added:
+- scripts/start_backend.sh
+- scripts/start_frontend.sh
+Files modified:
+- Makefile
