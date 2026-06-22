@@ -18,34 +18,21 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Trigger Render to build from repo
+        run: echo "Skipping local build/push; will request Render to build the service from the repository."
 
-      - name: Build and push image
-        uses: docker/build-push-action@v4
-        with:
-          context: ./
-          file: ./Dockerfile
-          push: true
-          tags: ghcr.io/${{ github.repository_owner }}/cincy-csl-backend:latest
-
-      - name: Trigger Render deploy
+      - name: Trigger Render deploy (repo build)
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
-          IMAGE_TAG: ghcr.io/${{ github.repository_owner }}/cincy-csl-backend:latest
         run: |
           if [ -z "$RENDER_API_KEY" ] || [ -z "$RENDER_SERVICE_ID" ]; then
             echo "Missing RENDER_API_KEY or RENDER_SERVICE_ID secrets. Skipping deploy.";
             exit 1;
           fi
-          echo "Triggering Render deploy via API"
+          echo "Triggering Render deploy via API (request Render to build from the connected repo)"
           curl -s -X POST \
             -H "Authorization: Bearer $RENDER_API_KEY" \
             -H "Content-Type: application/json" \
-            -d "{\"serviceId\": \"$RENDER_SERVICE_ID\", \"type\": \"web_service\", \"dockerImage\": \"$IMAGE_TAG\"}" \
+            -d "{\"serviceId\": \"$RENDER_SERVICE_ID\"}" \
             https://api.render.com/deploys
