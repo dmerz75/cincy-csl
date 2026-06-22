@@ -56,6 +56,24 @@ class League(Base):
     division = Column(String, nullable=True)
 
 
+class Court(Base):
+    __tablename__ = "courts"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+
+
+class CourtAvailability(Base):
+    __tablename__ = "court_availabilities"
+    id = Column(Integer, primary_key=True)
+    court_id = Column(Integer, ForeignKey("courts.id"), nullable=False)
+    weekday = Column(Integer, nullable=True)  # 0=Mon..6=Sun for recurring
+    start_time = Column(String, nullable=False)  # HH:MM
+    end_time = Column(String, nullable=False)    # HH:MM
+    recurring = Column(Integer, default=1)  # 1=true, 0=false
+
+    court = relationship("Court", foreign_keys=[court_id])
+
+
 def init_db(engine):
     Base.metadata.create_all(engine)
 
@@ -87,6 +105,22 @@ def create_team(session, name: str, captain_phone: str = None, contact_email: st
     session.commit()
     session.refresh(t)
     return t
+
+
+def create_court(session, name: str) -> Court:
+    c = Court(name=name)
+    session.add(c)
+    session.commit()
+    session.refresh(c)
+    return c
+
+
+def create_court_availability(session, court: Court, weekday: int, start_time: str, end_time: str, recurring: bool = True) -> CourtAvailability:
+    ca = CourtAvailability(court_id=court.id, weekday=weekday, start_time=start_time, end_time=end_time, recurring=1 if recurring else 0)
+    session.add(ca)
+    session.commit()
+    session.refresh(ca)
+    return ca
 
 
 def create_player(session, team: Team, first_name: str, last_name: str = None, phone: str = None, email: str = None) -> Player:
