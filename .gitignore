@@ -17,3 +17,7 @@ build/
 # Database
 *.db
 cincy_csl.db
+
+# Workspace
+cincy-csl.code-workspace
+.vscode

@@ -80,10 +80,8 @@ async def ip_whitelist_middleware(request: Request, call_next):
 
     return await call_next(request)
 
-# If a built React app exists at web/dist, serve it at /admin (static)
+# Path to built React app (if present)
 dist_dir = Path(__file__).parents[2] / "web" / "dist"
-if dist_dir.exists():
-    app.mount("/admin", StaticFiles(directory=str(dist_dir), html=True), name="admin")
 
 
 class PreviewRequest(BaseModel):
@@ -299,6 +297,16 @@ def api_export_csv(league_id: int, day: Optional[int] = None):
 @app.post("/api/admin/preview_schedule")
 def api_preview_schedule(req: PreviewRequest):
     return preview_schedule(req)
+
+# If a built React app exists at web/dist, serve it at /admin (static)
+if dist_dir.exists():
+    app.mount("/admin", StaticFiles(directory=str(dist_dir), html=True), name="admin")
+    # Some builds reference assets at the site root (/assets/...). To support those
+    # requests when the app is mounted under /admin, also expose the built assets
+    # at `/assets` so the JS/CSS can be loaded correctly.
+    assets_dir = dist_dir / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="admin_assets")
 
 
 if not dist_dir.exists():

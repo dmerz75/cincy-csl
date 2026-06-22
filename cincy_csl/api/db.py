@@ -226,8 +226,8 @@ def notify_captains_for_date(session, target_date, notifier):
     )
     calls = []
     for m in matches:
-        home = session.query(Team).get(m.home_team_id)
-        away = session.query(Team).get(m.away_team_id)
+        home = session.get(Team, m.home_team_id)
+        away = session.get(Team, m.away_team_id)
         msg = f"Match today: {home.name} vs {away.name} at {m.datetime.isoformat()} on {m.court or 'TBD'}"
         if home.captain_phone:
             notifier.send_sms(home.captain_phone, msg)
