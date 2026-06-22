@@ -1,0 +1,9 @@
+remote_theme: pages-themes/merlot
+title: "Cincy CSL"
+description: "Cincy Community Sports League"
+baseurl: "/cincy-csl"
+url: "https://dmerz75.github.io"
+
+# Optional settings
+paginate: 5
+permalink: /:collection/:name/
