@@ -23,9 +23,13 @@ jobs:
       - name: Install dependencies (web)
         working-directory: ./web
         run: npm ci
+        env:
+          VITE_API_URL: ${{ secrets.FRONTEND_API_URL }}
 
       - name: Build web
         working-directory: ./web
+        env:
+          VITE_API_URL: ${{ secrets.FRONTEND_API_URL }}
         run: npm run build
 
       - name: Deploy to GitHub Pages
