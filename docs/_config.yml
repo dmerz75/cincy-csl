@@ -7,3 +7,6 @@ url: "https://dmerz75.github.io"
 # Optional settings
 paginate: 5
 permalink: /:collection/:name/
+
+# Rebuild trigger (updated to force Pages rebuild)
+# timestamp: 2026-06-21T02:56:00Z
