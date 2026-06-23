@@ -15,7 +15,7 @@ export default function App(){
     setError(null)
     setData(null)
     try{
-      const resp = await fetch(`${API_BASE}/admin/preview_schedule`, {
+      const resp = await fetch(`${API_BASE}/preview_schedule`, {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({league_id: Number(leagueId), weeks: Number(weeks)})
@@ -41,7 +41,7 @@ export default function App(){
     async function load(){
       setLoadingS(true); setErrS(null); setSdata(null)
       try{
-        const resp = await fetch(`${apiBase}/admin/preview_schedule`,{
+        const resp = await fetch(`${apiBase}/preview_schedule`,{
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({league_id: Number(league), weeks: Number(weeksLocal)})
         })
@@ -56,7 +56,7 @@ export default function App(){
       const params = new URLSearchParams()
       params.append('league_id', league)
       if(dayFilter !== 'all') params.append('day', dayFilter)
-      const url = `${apiBase}/admin/export_csv?` + params.toString()
+      const url = `${apiBase}/export_csv?` + params.toString()
       window.open(url, '_blank')
     }
 
@@ -119,7 +119,7 @@ export default function App(){
     async function loadLeagues(){
       setLoading(true); setErr(null)
       try{
-        const resp = await fetch(`${apiBase}/admin/leagues`)
+        const resp = await fetch(`${apiBase}/leagues`)
         if(!resp.ok) throw new Error(await resp.text())
         setLeagues(await resp.json())
       }catch(e){ setErr(String(e)) }
@@ -129,7 +129,7 @@ export default function App(){
     async function loadTeamsFor(league_id){
       setTeams(null); setErr(null)
       try{
-        const resp = await fetch(`${apiBase}/admin/teams?league_id=${league_id}`)
+        const resp = await fetch(`${apiBase}/teams?league_id=${league_id}`)
         if(!resp.ok) throw new Error(await resp.text())
         setTeams(await resp.json())
       }catch(e){ setErr(String(e)) }
