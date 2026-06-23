@@ -72,6 +72,14 @@ footer small{color:#6b7280}
 .btn-remove{background:#fee2e2;color:#b91c1c;border:none;border-radius:6px;padding:5px 9px;cursor:pointer;font-weight:700}
 .btn-remove:disabled{opacity:0.4;cursor:default}
 .builder-results{min-height:120px}
+
+/* ── Create League box ────────────────────────────────────── */
+.create-league-box{background:#fff;border:1.5px solid var(--admin-blue);border-radius:9px;padding:12px 14px;margin-bottom:10px}
+.clb-title{font-weight:700;font-size:0.85rem;color:var(--admin-dark);margin-bottom:8px}
+.clb-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px}
+.clb-row label{display:flex;flex-direction:column;gap:3px;font-size:0.8rem;font-weight:600;color:#374151}
+.clb-row select{padding:5px 8px;border:1.5px solid #c7d8f8;border-radius:6px;font-size:0.88rem}
+.clb-preview{font-size:0.9rem;background:#f0f4ff;border-radius:6px;padding:6px 10px;margin-bottom:6px;color:var(--admin-blue)}
 .builder-summary{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
 .summary-chip{padding:5px 12px;border-radius:20px;font-size:0.82rem;font-weight:600;background:#e8f0fe;color:var(--admin-blue)}
 .summary-chip.assigned{background:#dcfce7;color:#15803d}

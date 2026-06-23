@@ -165,7 +165,11 @@ export default function App(){
 
   // ── Schedule Builder ─────────────────────────────────────────────────────────
   function ScheduleBuilder({ apiBase }) {
-    const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
+    const DAYS    = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
+    const LEVELS  = ['D','C3','C2','C1','B','BB','A','Open']
+    const GENDERS = ['Coed','Men','Women']
+    const DAY_NUM = {Monday:0,Tuesday:1,Wednesday:2,Thursday:3,Friday:4,Saturday:5,Sunday:6}
+
     // default start = next Monday
     function nextMonday() {
       const d = new Date(); const day = d.getDay()
@@ -184,11 +188,48 @@ export default function App(){
     const [result, setResult] = useState(null)
     const [err, setErr] = useState(null)
 
-    useEffect(()=>{
-      fetch(`${apiBase}/leagues`).then(r=>r.json()).then(ls=>{
-        setLeagues(ls); if(ls.length) setLeague(String(ls[0].id))
-      }).catch(()=>{})
-    },[])
+    // Create-league form state
+    const [showCreate, setShowCreate] = useState(false)
+    const [newDay,    setNewDay]    = useState('Monday')
+    const [newLevel,  setNewLevel]  = useState('C1')
+    const [newGender, setNewGender] = useState('Coed')
+    const [creating,  setCreating]  = useState(false)
+    const [createErr, setCreateErr] = useState(null)
+
+    // Auto-compose league name from parts
+    const composedName = `${newDay}-${newLevel}-${newGender}`
+
+    async function loadLeagues() {
+      const resp = await fetch(`${apiBase}/leagues`)
+      const ls = await resp.json()
+      setLeagues(ls)
+      if (ls.length && !league) setLeague(String(ls[0].id))
+    }
+
+    useEffect(() => { loadLeagues() }, [])
+
+    async function createLeague() {
+      setCreating(true); setCreateErr(null)
+      try {
+        const resp = await fetch(`${apiBase}/leagues`, {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({
+            name: composedName,
+            day_of_week: DAY_NUM[newDay],
+            division: newLevel,
+            gender: newGender,
+          })
+        })
+        if (!resp.ok) throw new Error(await resp.text())
+        const created = await resp.json()
+        await loadLeagues()
+        setLeague(String(created.id))
+        setDayOfWeek(DAY_NUM[newDay])
+        setShowCreate(false)
+      } catch(e) { setCreateErr(String(e)) }
+      setCreating(false)
+    }
 
     function addCourt()  { setCourts(c=>[...c, `Court ${c.length+1}`]) }
     function removeCourt(i){ setCourts(c=>c.filter((_,j)=>j!==i)) }
@@ -238,10 +279,44 @@ export default function App(){
             <section className="builder-section">
               <h3>League &amp; Date Range</h3>
               <label>League
-                <select value={league} onChange={e=>setLeague(e.target.value)}>
-                  {leagues.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}
-                </select>
+                <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                  <select value={league} onChange={e=>setLeague(e.target.value)} style={{flex:1}}>
+                    {leagues.length === 0 && <option value="">— no leagues —</option>}
+                    {leagues.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                  <button className="chip" style={{whiteSpace:'nowrap'}} onClick={()=>setShowCreate(v=>!v)}>
+                    {showCreate ? '✕ Cancel' : '+ New'}
+                  </button>
+                </div>
               </label>
+
+              {showCreate && (
+                <div className="create-league-box">
+                  <div className="clb-title">New League</div>
+                  <div className="clb-row">
+                    <label>Day
+                      <select value={newDay} onChange={e=>setNewDay(e.target.value)}>
+                        {DAYS.map(d=><option key={d}>{d}</option>)}
+                      </select>
+                    </label>
+                    <label>Level
+                      <select value={newLevel} onChange={e=>setNewLevel(e.target.value)}>
+                        {LEVELS.map(l=><option key={l}>{l}</option>)}
+                      </select>
+                    </label>
+                    <label>Gender
+                      <select value={newGender} onChange={e=>setNewGender(e.target.value)}>
+                        {GENDERS.map(g=><option key={g}>{g}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="clb-preview">📋 <strong>{composedName}</strong></div>
+                  {createErr && <div className="error" style={{fontSize:'0.82rem'}}>{createErr}</div>}
+                  <button onClick={createLeague} disabled={creating} style={{marginTop:6,width:'100%'}}>
+                    {creating ? 'Creating…' : `✅ Create "${composedName}"`}
+                  </button>
+                </div>
+              )}
               <label>Start date
                 <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} />
               </label>

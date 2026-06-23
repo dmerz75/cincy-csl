@@ -248,6 +248,25 @@ def list_leagues():
     ]
 
 
+class CreateLeagueRequest(BaseModel):
+    name: str
+    day_of_week: int          # 0=Monday … 6=Sunday
+    division: Optional[str] = None
+    gender: Optional[str] = None   # Men | Women | Coed (stored as part of name)
+
+
+@app.post("/admin/leagues", status_code=201)
+def create_league(req: CreateLeagueRequest):
+    engine = create_engine(_DB_URL)
+    session = get_session(engine)
+    from cincy_csl.api.db import League
+    league = League(name=req.name, day_of_week=req.day_of_week, division=req.division)
+    session.add(league)
+    session.commit()
+    session.refresh(league)
+    return {"id": league.id, "name": league.name, "day_of_week": league.day_of_week, "division": league.division}
+
+
 @app.get("/admin/teams")
 def list_teams(league_id: Optional[int] = Query(None)):
     engine = create_engine(_DB_URL)
@@ -306,6 +325,11 @@ def get_schedules(league_id: int, day: Optional[int] = Query(None)):
 @app.get("/api/admin/leagues")
 def api_list_leagues():
     return list_leagues()
+
+
+@app.post("/api/admin/leagues", status_code=201)
+def api_create_league(req: CreateLeagueRequest):
+    return create_league(req)
 
 
 @app.get("/api/admin/teams")
