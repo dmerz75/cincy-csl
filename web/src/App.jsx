@@ -12,152 +12,133 @@ export default function App(){
 
   // ── Weekly Calendar ──────────────────────────────────────────────────────────
   function WeeklyCalendar({ apiBase }) {
-    const [league, setLeague] = useState(leagueId)
-    const [leagues, setLeagues] = useState([])
-    const [loadingC, setLoadingC] = useState(false)
-    const [matches, setMatches] = useState(null)
-    const [errC, setErrC] = useState(null)
-    const [courtFilter, setCourtFilter] = useState('all')
-    const [weekFilter, setWeekFilter] = useState('all')
-
-    useEffect(() => {
-      fetch(`${apiBase}/leagues`).then(r=>r.json()).then(setLeagues).catch(()=>{})
-    }, [])
-    useEffect(() => { load(league) }, [league])
-
-    async function load(lid) {
-      setLoadingC(true); setErrC(null); setMatches(null)
-      setCourtFilter('all'); setWeekFilter('all')
-      try {
-        const resp = await fetch(`${apiBase}/schedules?league_id=${lid}`)
-        if (!resp.ok) throw new Error(await resp.text())
-        setMatches(await resp.json())
-      } catch(e) { setErrC(String(e)) }
-      setLoadingC(false)
-    }
+    const [allMatches, setAllMatches] = useState([])
+    const [leagues,    setLeagues]    = useState([])
+    const [facilities, setFacilities] = useState([])
+    const [facilityFilter, setFacilityFilter] = useState('all')
+    const [leagueFilter,   setLeagueFilter]   = useState('all')
+    const [loading, setLoading] = useState(false)
+    const [err,     setErr]     = useState(null)
 
     const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
     const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
-    function fmtDate(iso) {
-      const d = new Date(iso)
+    function isoMonday(iso) {
+      const dt = new Date(iso), day = dt.getUTCDay()
+      const m = new Date(dt); m.setUTCDate(dt.getUTCDate() + (day===0?-6:1-day))
+      return m.toISOString().slice(0,10)
+    }
+    function weekLabel(w) {
+      const d = new Date(w)
       return `${DAY[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]}`
     }
     function fmtTime(iso) {
-      const d = new Date(iso)
-      const h = d.getUTCHours(), m = d.getUTCMinutes()
-      const ampm = h >= 12 ? 'PM' : 'AM'
-      return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${ampm}`
-    }
-    function isoMonday(iso) {
-      const dt = new Date(iso)
-      const day = dt.getUTCDay()
-      const diff = day === 0 ? -6 : 1 - day
-      const mon = new Date(dt)
-      mon.setUTCDate(dt.getUTCDate() + diff)
-      return mon.toISOString().slice(0, 10)
-    }
-    function weekLabel(isoMon) {
-      const d = new Date(isoMon)
-      return `Week of ${DAY[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]}`
+      const d = new Date(iso), h = d.getUTCHours(), m = d.getUTCMinutes()
+      return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`
     }
 
-    // Derive unique courts and weeks from loaded matches
-    const allMatches = (matches || []).filter(m => m.datetime)
-    const courts = ['all', ...Array.from(new Set(allMatches.map(m=>m.court).filter(Boolean))).sort()]
-    const allWeeks = [...new Set(allMatches.map(m=>isoMonday(m.datetime)))].sort()
-    const weekOptions = ['all', ...allWeeks]
+    useEffect(() => {
+      setLoading(true)
+      Promise.all([
+        fetch(`${apiBase}/all_matches`).then(r=>r.json()),
+        fetch(`${apiBase}/leagues`).then(r=>r.json()),
+        fetch(`${apiBase}/facilities`).then(r=>r.json()),
+      ]).then(([ms, ls, fs]) => { setAllMatches(ms); setLeagues(ls); setFacilities(fs) })
+        .catch(e => setErr(String(e)))
+        .finally(() => setLoading(false))
+    }, [])
 
-    // Apply filters
-    const filtered = allMatches
-      .filter(m => courtFilter === 'all' || m.court === courtFilter)
-      .filter(m => weekFilter === 'all' || isoMonday(m.datetime) === weekFilter)
+    const activeFacility = facilities.find(f => String(f.id) === facilityFilter)
+    const facilityCourts = activeFacility ? new Set(activeFacility.default_courts) : null
 
-    // Group into weeks
-    function groupByWeek(ms) {
-      const map = {}
-      for (const m of ms) {
-        const key = isoMonday(m.datetime)
-        if (!map[key]) map[key] = []
-        map[key].push(m)
-      }
-      return Object.entries(map).sort(([a],[b]) => a.localeCompare(b))
-    }
-    const grouped = groupByWeek(filtered)
+    const filtered = allMatches.filter(m => {
+      if (!m.datetime) return false
+      if (facilityCourts && !facilityCourts.has(m.court)) return false
+      if (leagueFilter !== 'all' && String(m.league_id) !== leagueFilter) return false
+      return true
+    })
+
+    const weeks = [...new Set(filtered.map(m=>isoMonday(m.datetime)))].sort()
+    const activeLeagues = leagues.filter(l => filtered.some(m => m.league_id === l.id))
 
     return (
       <div>
         {/* ── Toolbar ── */}
-        <div className="cal-toolbar">
+        <div className="cal-toolbar" style={{flexWrap:'wrap',gap:8}}>
+          {facilities.length > 0 && (
+            <label>Facility
+              <select value={facilityFilter} onChange={e=>setFacilityFilter(e.target.value)}>
+                <option value="all">All facilities</option>
+                {facilities.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+            </label>
+          )}
           <label>League
-            <select value={league} onChange={e=>setLeague(e.target.value)}>
-              {leagues.length === 0
-                ? <option value={league}>League {league}</option>
-                : leagues.map(l=><option key={l.id} value={l.id}>{l.name}</option>)
-              }
+            <select value={leagueFilter} onChange={e=>setLeagueFilter(e.target.value)}>
+              <option value="all">All leagues</option>
+              {leagues.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
           </label>
-          <button onClick={()=>load(league)} disabled={loadingC}>{loadingC ? 'Loading…' : 'Refresh'}</button>
-          <button onClick={()=>{ window.open(`${apiBase}/export_csv?league_id=${league}`,'_blank') }}>Export CSV</button>
         </div>
 
-        {/* ── Court filter chips ── */}
-        {courts.length > 1 && (
-          <div className="filter-row">
-            <span className="filter-label">Court:</span>
-            {courts.map(c => (
-              <button key={c}
-                className={`chip${courtFilter===c?' chip-active':''}`}
-                onClick={()=>setCourtFilter(c)}>
-                {c === 'all' ? 'All courts' : `🏐 ${c}`}
-              </button>
-            ))}
+        {/* ── Legend ── */}
+        {activeLeagues.length > 1 && (
+          <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:10}}>
+            {activeLeagues.map(l => {
+              const col = leagueColor(l.id)
+              return <span key={l.id} style={{background:col.bg,color:col.fg,padding:'2px 10px',borderRadius:10,fontSize:'0.78rem',fontWeight:600}}>{l.name}</span>
+            })}
           </div>
         )}
 
-        {/* ── Week filter chips ── */}
-        {allWeeks.length > 1 && (
-          <div className="filter-row">
-            <span className="filter-label">Week:</span>
-            <button className={`chip${weekFilter==='all'?' chip-active':''}`} onClick={()=>setWeekFilter('all')}>All weeks</button>
-            {allWeeks.map(w => (
-              <button key={w}
-                className={`chip${weekFilter===w?' chip-active':''}`}
-                onClick={()=>setWeekFilter(w)}>
-                {weekLabel(w)}
-              </button>
-            ))}
-          </div>
-        )}
+        {err     && <div className="error">{err}</div>}
+        {loading && <div className="cal-empty">Loading…</div>}
+        {!loading && filtered.length === 0 && <div className="cal-empty">No matches found.</div>}
 
-        {errC && <div className="error">{errC}</div>}
-        {loadingC && <div className="cal-empty">Loading schedule…</div>}
-        {!loadingC && matches && allMatches.length === 0 && (
-          <div className="cal-empty">No matches found. Run <code>schedule_with_courts.py</code> to generate a schedule.</div>
+        {/* ── Compact week rows ── */}
+        {!loading && weeks.length > 0 && (
+          <table style={{width:'100%',borderCollapse:'collapse'}}>
+            <tbody>
+              {weeks.map(w => {
+                const ms = filtered
+                  .filter(m => isoMonday(m.datetime) === w)
+                  .sort((a,b) => a.datetime.localeCompare(b.datetime))
+                return (
+                  <tr key={w} style={{borderBottom:'1px solid #1e293b'}}>
+                    <td style={{padding:'8px 12px',whiteSpace:'nowrap',color:'#94a3b8',
+                                fontSize:'0.82rem',fontWeight:600,verticalAlign:'top',minWidth:90}}>
+                      {weekLabel(w)}<br/>
+                      <span style={{color:'#475569',fontSize:'0.72rem'}}>{ms.length} match{ms.length!==1?'es':''}</span>
+                    </td>
+                    <td style={{padding:'6px 4px'}}>
+                      <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+                        {ms.map(m => {
+                          const col = leagueColor(m.league_id)
+                          return (
+                            <div key={m.id} title={`${m.league_name||''}\n${m.home} vs ${m.away}`}
+                              style={{background:col.bg,color:col.fg,borderRadius:6,
+                                      padding:'4px 8px',fontSize:'0.78rem',lineHeight:1.35,
+                                      minWidth:110,maxWidth:170}}>
+                              <div style={{fontWeight:700,opacity:0.85,fontSize:'0.7rem',marginBottom:1}}>
+                                {fmtTime(m.datetime)}{m.court ? ` · ${m.court}` : ''}
+                              </div>
+                              <div style={{fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                                {m.home}
+                              </div>
+                              <div style={{opacity:0.8,fontSize:'0.7rem',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                                vs {m.away}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         )}
-        {!loadingC && matches && allMatches.length > 0 && filtered.length === 0 && (
-          <div className="cal-empty">No matches match the selected filters.</div>
-        )}
-
-        {grouped.map(([monday, ms]) => (
-          <div key={monday} className="week-card">
-            <div className="week-header">{weekLabel(monday)} <span className="week-count">{ms.length} match{ms.length!==1?'es':''}</span></div>
-            <div className="match-grid">
-              {ms.sort((a,b)=>a.datetime.localeCompare(b.datetime)).map(m => (
-                <div key={m.id} className="match-pill">
-                  <div className="match-date">{fmtDate(m.datetime)}</div>
-                  <div className="match-time">{fmtTime(m.datetime)}</div>
-                  <div className="match-teams">
-                    <span className="team home">{m.home}</span>
-                    <span className="vs">vs</span>
-                    <span className="team away">{m.away}</span>
-                  </div>
-                  {m.court && <div className="court-badge">🏐 {m.court}</div>}
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
       </div>
     )
   }
