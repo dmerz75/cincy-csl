@@ -59,7 +59,7 @@ export default function App(){
     })
 
     const weeks = [...new Set(filtered.map(m=>isoMonday(m.datetime)))].sort()
-    const activeLeagues = leagues.filter(l => filtered.some(m => m.league_id === l.id))
+    const leaguesWithMatches = new Set(filtered.map(m => m.league_id))
 
     return (
       <div>
@@ -81,12 +81,23 @@ export default function App(){
           </label>
         </div>
 
-        {/* ── Legend ── */}
-        {activeLeagues.length > 1 && (
+        {/* ── Legend — always shows all leagues ── */}
+        {leagues.length > 0 && (
           <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:10}}>
-            {activeLeagues.map(l => {
+            {leagues.map(l => {
               const col = leagueColor(l.id)
-              return <span key={l.id} style={{background:col.bg,color:col.fg,padding:'2px 10px',borderRadius:10,fontSize:'0.78rem',fontWeight:600}}>{l.name}</span>
+              const hasMatches = leaguesWithMatches.has(l.id)
+              return (
+                <span key={l.id} style={{
+                  background: col.bg, color: col.fg,
+                  padding:'2px 10px', borderRadius:10,
+                  fontSize:'0.78rem', fontWeight:600,
+                  opacity: hasMatches ? 1 : 0.35,
+                  outline: hasMatches ? 'none' : '1px dashed rgba(255,255,255,0.3)',
+                }}>
+                  {l.name}
+                </span>
+              )
             })}
           </div>
         )}
