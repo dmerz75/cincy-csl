@@ -25,3 +25,28 @@ th{background:linear-gradient(90deg,var(--admin-blue),var(--admin-dark));color:#
 .error{color:#b00020;margin-top:12px}
 
 footer small{color:#6b7280}
+
+/* ── Nav ──────────────────────────────────────────────────── */
+.nav{display:flex;gap:8px;max-width:900px;margin:12px auto 0;padding:0 16px}
+.nav button{background:transparent;color:var(--admin-blue);border:2px solid var(--admin-blue);padding:7px 14px;border-radius:8px;font-weight:600}
+.nav button.active,.nav button:hover{background:var(--admin-blue);color:#fff}
+
+/* ── Weekly Calendar ──────────────────────────────────────── */
+.cal-toolbar{display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+.cal-toolbar label{display:flex;gap:6px;align-items:center;font-weight:600}
+.cal-empty{color:#6b7280;padding:24px 0;text-align:center}
+
+.week-card{margin-bottom:24px;border:1px solid #dde8ff;border-radius:12px;overflow:hidden}
+.week-header{background:linear-gradient(90deg,var(--admin-blue),var(--admin-dark));color:#fff;padding:10px 16px;font-weight:700;font-size:0.95rem;letter-spacing:0.02em}
+.match-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;padding:14px}
+
+.match-pill{background:var(--muted);border:1px solid #dde8ff;border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;transition:box-shadow .15s}
+.match-pill:hover{box-shadow:0 4px 14px rgba(11,99,206,0.13)}
+.match-date{font-size:0.78rem;color:var(--admin-blue);font-weight:700;text-transform:uppercase;letter-spacing:0.05em}
+.match-time{font-size:1rem;font-weight:700;color:#0b1b2b}
+.match-teams{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px}
+.team{font-weight:600;font-size:0.9rem}
+.team.home{color:#073b8c}
+.team.away{color:#1a5fb4}
+.vs{font-size:0.75rem;color:#6b7280;font-weight:400}
+.court-badge{margin-top:6px;font-size:0.78rem;background:#e8f0fe;color:var(--admin-blue);border-radius:6px;padding:3px 8px;display:inline-block;font-weight:600}

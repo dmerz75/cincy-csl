@@ -8,7 +8,102 @@ export default function App(){
   const [error, setError] = useState(null)
 
   const API_BASE = (import.meta.env.VITE_API_URL || '') + '/api/admin'
-  const [view, setView] = useState('home') // 'home' | 'preview' | 'schedules'
+  const [view, setView] = useState('calendar') // 'home' | 'preview' | 'schedules' | 'calendar'
+
+  // ── Weekly Calendar ──────────────────────────────────────────────────────────
+  function WeeklyCalendar({ apiBase }) {
+    const [league, setLeague] = useState(leagueId)
+    const [loadingC, setLoadingC] = useState(false)
+    const [matches, setMatches] = useState(null)
+    const [errC, setErrC] = useState(null)
+
+    useEffect(() => { load(league) }, [])
+
+    async function load(lid) {
+      setLoadingC(true); setErrC(null); setMatches(null)
+      try {
+        const resp = await fetch(`${apiBase}/schedules?league_id=${lid}`)
+        if (!resp.ok) throw new Error(await resp.text())
+        setMatches(await resp.json())
+      } catch(e) { setErrC(String(e)) }
+      setLoadingC(false)
+    }
+
+    // Group assigned matches by ISO week label ("Week of Mon DD MMM")
+    function groupByWeek(ms) {
+      const weeks = {}
+      for (const m of (ms || [])) {
+        if (!m.datetime) continue
+        const dt = new Date(m.datetime)
+        // Monday of this match's week
+        const day = dt.getUTCDay() // 0=Sun
+        const diff = (day === 0 ? -6 : 1 - day)
+        const mon = new Date(dt)
+        mon.setUTCDate(dt.getUTCDate() + diff)
+        const key = mon.toISOString().slice(0, 10)
+        if (!weeks[key]) weeks[key] = []
+        weeks[key].push(m)
+      }
+      return Object.entries(weeks).sort(([a],[b]) => a.localeCompare(b))
+    }
+
+    const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+    const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+    function fmtDate(iso) {
+      const d = new Date(iso)
+      return `${DAY[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]}`
+    }
+    function fmtTime(iso) {
+      const d = new Date(iso)
+      const h = d.getUTCHours(), m = d.getUTCMinutes()
+      const ampm = h >= 12 ? 'PM' : 'AM'
+      return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${ampm}`
+    }
+    function weekLabel(isoMonday) {
+      const d = new Date(isoMonday)
+      return `Week of ${DAY[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]}`
+    }
+
+    const weeks = groupByWeek(matches)
+
+    return (
+      <div>
+        <div className="cal-toolbar">
+          <label>League ID
+            <input type="number" value={league} onChange={e=>{ setLeague(e.target.value); load(e.target.value) }} />
+          </label>
+          <button onClick={()=>load(league)} disabled={loadingC}>{loadingC ? 'Loading…' : 'Refresh'}</button>
+          <button onClick={()=>{ const u=`${apiBase}/export_csv?league_id=${league}`; window.open(u,'_blank') }}>Export CSV</button>
+        </div>
+        {errC && <div className="error">{errC}</div>}
+        {loadingC && <div className="cal-empty">Loading schedule…</div>}
+        {!loadingC && matches && matches.length === 0 && (
+          <div className="cal-empty">No matches found. Run <code>schedule_with_courts.py</code> to generate a schedule.</div>
+        )}
+        {weeks.map(([monday, ms]) => (
+          <div key={monday} className="week-card">
+            <div className="week-header">{weekLabel(monday)}</div>
+            <div className="match-grid">
+              {ms.sort((a,b)=>a.datetime.localeCompare(b.datetime)).map(m => (
+                <div key={m.id} className="match-pill">
+                  <div className="match-date">{fmtDate(m.datetime)}</div>
+                  <div className="match-time">{fmtTime(m.datetime)}</div>
+                  <div className="match-teams">
+                    <span className="team home">{m.home}</span>
+                    <span className="vs">vs</span>
+                    <span className="team away">{m.away}</span>
+                  </div>
+                  {m.court && <div className="court-badge">🏐 {m.court}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
 
   async function preview(){
     setLoading(true)
@@ -181,11 +276,15 @@ export default function App(){
             </div>
           </header>
               <div className="nav">
+                <button onClick={()=>setView('calendar')} className={view==='calendar'?'active':''}>📅 Calendar</button>
                 <button onClick={()=>setView('preview')} className={view==='preview'?'active':''}>Schedule Preview</button>
                 <button onClick={()=>setView('schedules')} className={view==='schedules'?'active':''}>Current Schedules</button>
               </div>
 
               <div className="container">
+                {view === 'calendar' && (
+        <WeeklyCalendar apiBase={API_BASE} />
+        )}
                 {view === 'preview' && (
       <div className="controls">
         <label>League ID <input type="number" value={leagueId} onChange={e=>setLeagueId(e.target.value)} /></label>
