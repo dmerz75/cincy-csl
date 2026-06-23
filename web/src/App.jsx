@@ -274,8 +274,9 @@ export default function App(){
       try {
         const resp = await fetch(`${apiBase}/leagues/${league}`, { method: 'DELETE' })
         if (!resp.ok) throw new Error(await resp.text())
-        await loadLeagues()
-        setLeague('')
+        const ls = await fetch(`${apiBase}/leagues`).then(r=>r.json())
+        setLeagues(ls)
+        setLeague(ls.length ? String(ls[0].id) : '')
         setResult(null)
       } catch(e) { setErr(String(e)) }
       setDeleting(false)
@@ -571,6 +572,8 @@ export default function App(){
   function CourtView({ apiBase }) {
     const [allMatches, setAllMatches] = useState([])
     const [leagues, setLeagues] = useState([])
+    const [facilities, setFacilities] = useState([])
+    const [facilityFilter, setFacilityFilter] = useState('all')
     const [leagueFilter, setLeagueFilter] = useState('all')
     const [weekFilter, setWeekFilter] = useState('all')
     const [loadingC, setLoadingC] = useState(false)
@@ -595,15 +598,20 @@ export default function App(){
       Promise.all([
         fetch(`${apiBase}/all_matches`).then(r=>r.json()),
         fetch(`${apiBase}/leagues`).then(r=>r.json()),
-      ]).then(([ms, ls]) => { setAllMatches(ms); setLeagues(ls) })
+        fetch(`${apiBase}/facilities`).then(r=>r.json()),
+      ]).then(([ms, ls, fs]) => { setAllMatches(ms); setLeagues(ls); setFacilities(fs) })
         .catch(e => setErrC(String(e)))
         .finally(() => setLoadingC(false))
     }, [])
+
+    const activeFacility = facilities.find(f => String(f.id) === facilityFilter)
+    const facilityCourts = activeFacility ? new Set(activeFacility.default_courts) : null
 
     const allWeeks = [...new Set(allMatches.filter(m=>m.datetime).map(m=>isoMonday(m.datetime)))].sort()
 
     const filtered = allMatches.filter(m => {
       if (!m.datetime) return false
+      if (facilityCourts && !facilityCourts.has(m.court)) return false
       if (leagueFilter !== 'all' && String(m.league_id) !== leagueFilter) return false
       if (weekFilter !== 'all' && isoMonday(m.datetime) !== weekFilter) return false
       return true
@@ -619,6 +627,14 @@ export default function App(){
     return (
       <div>
         <div className="cal-toolbar" style={{flexWrap:'wrap',gap:8}}>
+          {facilities.length > 0 && (
+            <label>Facility
+              <select value={facilityFilter} onChange={e=>{ setFacilityFilter(e.target.value); setWeekFilter('all') }}>
+                <option value="all">All facilities</option>
+                {facilities.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+            </label>
+          )}
           <label>League
             <select value={leagueFilter} onChange={e=>setLeagueFilter(e.target.value)}>
               <option value="all">All leagues</option>
