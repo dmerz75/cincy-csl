@@ -653,6 +653,136 @@ export default function App(){
   }
   // ─────────────────────────────────────────────────────────────────────────────
 
+  // ── Facility Profile View ──────────────────────────────────────────────────
+  function FacilityView({ apiBase }) {
+    const [facilities, setFacilities] = useState([])
+    const [loading, setLoading] = useState(false)
+    const [editingId, setEditingId] = useState(null) // null = none, 0 = new
+    const [fName, setFName] = useState('')
+    const [fAddress, setFAddress] = useState('')
+    const [fCourts, setFCourts] = useState(['Court 1','Court 2'])
+    const [fSlots, setFSlots] = useState(['18:00','19:00','20:00'])
+    const [saving, setSaving] = useState(false)
+    const [err, setErr] = useState(null)
+
+    async function load() {
+      setLoading(true)
+      try { setFacilities(await fetch(`${apiBase}/facilities`).then(r=>r.json())) } catch(_) {}
+      setLoading(false)
+    }
+    useEffect(() => { load() }, [])
+
+    function openNew() {
+      setFName(''); setFAddress(''); setFCourts(['Court 1','Court 2']); setFSlots(['18:00','19:00','20:00'])
+      setErr(null); setEditingId(0)
+    }
+    function openEdit(f) {
+      setFName(f.name); setFAddress(f.address||'')
+      setFCourts(f.default_courts.length ? [...f.default_courts] : ['Court 1'])
+      setFSlots(f.default_time_slots.length ? [...f.default_time_slots] : ['18:00'])
+      setErr(null); setEditingId(f.id)
+    }
+    function cancel() { setEditingId(null) }
+
+    async function save() {
+      setSaving(true); setErr(null)
+      const body = { name: fName, address: fAddress||null, default_courts: fCourts.filter(Boolean), default_time_slots: fSlots.filter(Boolean) }
+      try {
+        const url = editingId ? `${apiBase}/facilities/${editingId}` : `${apiBase}/facilities`
+        const resp = await fetch(url, { method: editingId ? 'PUT' : 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) })
+        if (!resp.ok) throw new Error(await resp.text())
+        await load(); setEditingId(null)
+      } catch(e) { setErr(String(e)) }
+      setSaving(false)
+    }
+
+    const form = (
+      <div className="create-league-box" style={{marginBottom:16}}>
+        <div className="clb-title">{editingId ? '✏️ Edit Facility' : '🏟 New Facility'}</div>
+        <label>Name
+          <input value={fName} onChange={e=>setFName(e.target.value)} placeholder="e.g. Sportsman's" />
+        </label>
+        <label style={{marginBottom:8}}>Address
+          <input value={fAddress} onChange={e=>setFAddress(e.target.value)} placeholder="e.g. 123 Main St, Cincinnati OH" />
+        </label>
+        <div className="clb-row" style={{alignItems:'flex-start',gap:16}}>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:600,marginBottom:4}}>Default Courts</div>
+            {fCourts.map((c,i)=>(
+              <div key={i} className="builder-row">
+                <input value={c} onChange={e=>{const a=[...fCourts];a[i]=e.target.value;setFCourts(a)}} placeholder="Court name" />
+                <button className="btn-remove" onClick={()=>setFCourts(fCourts.filter((_,j)=>j!==i))} disabled={fCourts.length===1}>✕</button>
+              </div>
+            ))}
+            <button className="chip" onClick={()=>setFCourts([...fCourts,`Court ${fCourts.length+1}`])}>+ Add</button>
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:600,marginBottom:4}}>Default Time Slots</div>
+            {fSlots.map((s,i)=>(
+              <div key={i} className="builder-row">
+                <input type="time" value={s} onChange={e=>{const a=[...fSlots];a[i]=e.target.value;setFSlots(a)}} />
+                <button className="btn-remove" onClick={()=>setFSlots(fSlots.filter((_,j)=>j!==i))} disabled={fSlots.length===1}>✕</button>
+              </div>
+            ))}
+            <button className="chip" onClick={()=>setFSlots([...fSlots,'18:00'])}>+ Add</button>
+          </div>
+        </div>
+        {err && <div className="error" style={{marginTop:6}}>{err}</div>}
+        <div style={{display:'flex',gap:8,marginTop:10}}>
+          <button onClick={save} disabled={saving||!fName.trim()} style={{flex:1}}>{saving?'Saving…':'💾 Save Facility'}</button>
+          <button className="chip" onClick={cancel}>✕ Cancel</button>
+        </div>
+      </div>
+    )
+
+    return (
+      <div style={{maxWidth:720}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <h2 style={{margin:0}}>Facilities</h2>
+          {editingId === null && <button onClick={openNew}>+ New Facility</button>}
+        </div>
+
+        {editingId === 0 && form}
+
+        {loading && <div className="cal-empty">Loading…</div>}
+        {!loading && facilities.length === 0 && editingId === null && (
+          <div className="cal-empty">No facilities yet — click "+ New Facility" to add one.</div>
+        )}
+
+        {facilities.map(f => (
+          <div key={f.id} style={{background:'#1e293b',borderRadius:10,padding:'14px 18px',marginBottom:12,border:'1px solid #334155'}}>
+            {editingId === f.id ? form : (
+              <>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:'1.05rem',marginBottom:2}}>🏟 {f.name}</div>
+                    {f.address && <div style={{color:'#94a3b8',fontSize:'0.85rem',marginBottom:6}}>📍 {f.address}</div>}
+                  </div>
+                  <button className="chip" onClick={()=>openEdit(f)}>✏️ Edit</button>
+                </div>
+                <div style={{display:'flex',gap:24,marginTop:4}}>
+                  <div>
+                    <div style={{color:'#64748b',fontSize:'0.75rem',fontWeight:600,textTransform:'uppercase',marginBottom:4}}>Courts</div>
+                    {f.default_courts.length
+                      ? f.default_courts.map(c=><span key={c} className="chip" style={{marginRight:4,marginBottom:4,display:'inline-block'}}>🏐 {c}</span>)
+                      : <span style={{color:'#475569',fontSize:'0.85rem'}}>none</span>}
+                  </div>
+                  <div>
+                    <div style={{color:'#64748b',fontSize:'0.75rem',fontWeight:600,textTransform:'uppercase',marginBottom:4}}>Time Slots</div>
+                    {f.default_time_slots.length
+                      ? f.default_time_slots.map(s=><span key={s} className="chip" style={{marginRight:4,marginBottom:4,display:'inline-block'}}>🕐 {s}</span>)
+                      : <span style={{color:'#475569',fontSize:'0.85rem'}}>none</span>}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+    )
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
+
   function SchedulesView({apiBase}){
     const [league, setLeague] = useState(leagueId)
     const [weeksLocal, setWeeksLocal] = useState(8)
@@ -804,13 +934,17 @@ export default function App(){
             </div>
           </header>
               <div className="nav">
-                <button onClick={()=>setView('courts')} className={view==='courts'?'active':''}>🏟 Court View</button>
+                <button onClick={()=>setView('facilities')} className={view==='facilities'?'active':''}>🏟 Facilities</button>
+                <button onClick={()=>setView('courts')} className={view==='courts'?'active':''}>🗺 Court View</button>
                 <button onClick={()=>setView('calendar')} className={view==='calendar'?'active':''}>📅 Calendar</button>
                 <button onClick={()=>setView('preview')} className={view==='preview'?'active':''}>🗓 Schedule Builder</button>
                 <button onClick={()=>setView('schedules')} className={view==='schedules'?'active':''}>Current Schedules</button>
               </div>
 
               <div className="container">
+                {view === 'facilities' && (
+        <FacilityView apiBase={API_BASE} />
+        )}
                 {view === 'courts' && (
         <CourtView apiBase={API_BASE} />
         )}
