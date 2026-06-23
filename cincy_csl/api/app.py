@@ -267,6 +267,64 @@ def create_league(req: CreateLeagueRequest):
     return {"id": league.id, "name": league.name, "day_of_week": league.day_of_week, "division": league.division}
 
 
+# ── Facilities ────────────────────────────────────────────────────────────────
+
+class FacilityRequest(BaseModel):
+    name: str
+    default_courts: Optional[List[str]] = None    # ["Court 1", "Court 2"]
+    default_time_slots: Optional[List[str]] = None # ["18:00", "19:00", "20:00"]
+    address: Optional[str] = None
+
+
+def _facility_out(f):
+    return {
+        "id": f.id,
+        "name": f.name,
+        "address": f.address,
+        "default_courts": f.default_courts.split(",") if f.default_courts else [],
+        "default_time_slots": f.default_time_slots.split(",") if f.default_time_slots else [],
+    }
+
+
+@app.get("/admin/facilities")
+def list_facilities():
+    from cincy_csl.api.db import Facility
+    engine = create_engine(_DB_URL)
+    session = get_session(engine)
+    return [_facility_out(f) for f in session.query(Facility).all()]
+
+
+@app.post("/admin/facilities", status_code=201)
+def create_facility(req: FacilityRequest):
+    from cincy_csl.api.db import Facility
+    engine = create_engine(_DB_URL)
+    session = get_session(engine)
+    f = Facility(
+        name=req.name,
+        address=req.address,
+        default_courts=",".join(req.default_courts) if req.default_courts else None,
+        default_time_slots=",".join(req.default_time_slots) if req.default_time_slots else None,
+    )
+    session.add(f); session.commit(); session.refresh(f)
+    return _facility_out(f)
+
+
+@app.put("/admin/facilities/{facility_id}")
+def update_facility(facility_id: int, req: FacilityRequest):
+    from cincy_csl.api.db import Facility
+    engine = create_engine(_DB_URL)
+    session = get_session(engine)
+    f = session.get(Facility, facility_id)
+    if not f:
+        raise HTTPException(status_code=404, detail="Facility not found")
+    f.name = req.name
+    f.address = req.address
+    f.default_courts = ",".join(req.default_courts) if req.default_courts else None
+    f.default_time_slots = ",".join(req.default_time_slots) if req.default_time_slots else None
+    session.commit(); session.refresh(f)
+    return _facility_out(f)
+
+
 @app.get("/admin/teams")
 def list_teams(league_id: Optional[int] = Query(None)):
     engine = create_engine(_DB_URL)
@@ -330,6 +388,21 @@ def api_list_leagues():
 @app.post("/api/admin/leagues", status_code=201)
 def api_create_league(req: CreateLeagueRequest):
     return create_league(req)
+
+
+@app.get("/api/admin/facilities")
+def api_list_facilities():
+    return list_facilities()
+
+
+@app.post("/api/admin/facilities", status_code=201)
+def api_create_facility(req: FacilityRequest):
+    return create_facility(req)
+
+
+@app.put("/api/admin/facilities/{facility_id}")
+def api_update_facility(facility_id: int, req: FacilityRequest):
+    return update_facility(facility_id, req)
 
 
 @app.get("/api/admin/teams")

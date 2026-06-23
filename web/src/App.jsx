@@ -188,6 +188,63 @@ export default function App(){
     const [result, setResult] = useState(null)
     const [err, setErr] = useState(null)
 
+    // Facility state
+    const [facilities, setFacilities] = useState([])
+    const [facilityId, setFacilityId] = useState('')
+    const [showFacilityForm, setShowFacilityForm] = useState(false)
+    const [facilityMode, setFacilityMode] = useState('create') // 'create' | 'edit'
+    const [fName, setFName] = useState('')
+    const [fAddress, setFAddress] = useState('')
+    const [fCourts, setFCourts] = useState(['Court 1','Court 2'])
+    const [fSlots, setFSlots] = useState(['18:00','19:00','20:00'])
+    const [fSaving, setFSaving] = useState(false)
+    const [fErr, setFErr] = useState(null)
+
+    async function loadFacilities() {
+      try {
+        const resp = await fetch(`${apiBase}/facilities`)
+        if (resp.ok) setFacilities(await resp.json())
+      } catch(_) {}
+    }
+
+    function applyFacility(fid) {
+      const f = facilities.find(x => String(x.id) === String(fid))
+      if (!f) return
+      if (f.default_courts.length) setCourts(f.default_courts)
+      if (f.default_time_slots.length) setSlots(f.default_time_slots)
+    }
+
+    function openEditFacility() {
+      const f = facilities.find(x => String(x.id) === String(facilityId))
+      if (!f) return
+      setFName(f.name); setFAddress(f.address||'')
+      setFCourts(f.default_courts.length ? [...f.default_courts] : ['Court 1'])
+      setFSlots(f.default_time_slots.length ? [...f.default_time_slots] : ['18:00'])
+      setFacilityMode('edit'); setShowFacilityForm(true)
+    }
+
+    function openNewFacility() {
+      setFName(''); setFAddress(''); setFCourts(['Court 1','Court 2']); setFSlots(['18:00','19:00','20:00'])
+      setFacilityMode('create'); setShowFacilityForm(true)
+    }
+
+    async function saveFacility() {
+      setFSaving(true); setFErr(null)
+      const body = { name: fName, address: fAddress||null, default_courts: fCourts.filter(Boolean), default_time_slots: fSlots.filter(Boolean) }
+      try {
+        const url = facilityMode === 'edit' ? `${apiBase}/facilities/${facilityId}` : `${apiBase}/facilities`
+        const method = facilityMode === 'edit' ? 'PUT' : 'POST'
+        const resp = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) })
+        if (!resp.ok) throw new Error(await resp.text())
+        const saved = await resp.json()
+        await loadFacilities()
+        setFacilityId(String(saved.id))
+        setCourts(saved.default_courts); setSlots(saved.default_time_slots)
+        setShowFacilityForm(false)
+      } catch(e) { setFErr(String(e)) }
+      setFSaving(false)
+    }
+
     // Create-league form state
     const [showCreate, setShowCreate] = useState(false)
     const [newDay,    setNewDay]    = useState('Monday')
@@ -206,7 +263,7 @@ export default function App(){
       if (ls.length && !league) setLeague(String(ls[0].id))
     }
 
-    useEffect(() => { loadLeagues() }, [])
+    useEffect(() => { loadLeagues(); loadFacilities() }, [])
 
     async function createLeague() {
       setCreating(true); setCreateErr(null)
@@ -331,6 +388,64 @@ export default function App(){
             </section>
 
             <section className="builder-section">
+              <h3>Facility</h3>
+              <label>Select facility
+                <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                  <select value={facilityId} onChange={e=>{ setFacilityId(e.target.value); applyFacility(e.target.value) }} style={{flex:1}}>
+                    <option value="">— none —</option>
+                    {facilities.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
+                  </select>
+                  <button className="chip" style={{whiteSpace:'nowrap'}} onClick={openNewFacility}>+ New</button>
+                  {facilityId && <button className="chip" style={{whiteSpace:'nowrap'}} onClick={openEditFacility}>✏️ Edit</button>}
+                </div>
+              </label>
+              {facilityId && !showFacilityForm && (() => {
+                const f = facilities.find(x=>String(x.id)===String(facilityId))
+                return f ? <div style={{fontSize:'0.82rem',color:'#94a3b8',marginTop:4}}>{f.address && <span>📍 {f.address} · </span>}{f.default_courts.length} courts · {f.default_time_slots.length} slots</div> : null
+              })()}
+              {showFacilityForm && (
+                <div className="create-league-box" style={{marginTop:10}}>
+                  <div className="clb-title">{facilityMode==='edit' ? '✏️ Edit Facility' : '🏟 New Facility'}</div>
+                  <label style={{marginBottom:4}}>Name
+                    <input value={fName} onChange={e=>setFName(e.target.value)} placeholder="e.g. Sportsman's" />
+                  </label>
+                  <label style={{marginBottom:8}}>Address
+                    <input value={fAddress} onChange={e=>setFAddress(e.target.value)} placeholder="e.g. 123 Main St" />
+                  </label>
+                  <div className="clb-row" style={{alignItems:'flex-start',gap:12}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:600,marginBottom:4}}>Courts</div>
+                      {fCourts.map((c,i)=>(
+                        <div key={i} className="builder-row">
+                          <input value={c} onChange={e=>{ const a=[...fCourts]; a[i]=e.target.value; setFCourts(a) }} placeholder="Court name" />
+                          <button className="btn-remove" onClick={()=>setFCourts(fCourts.filter((_,j)=>j!==i))} disabled={fCourts.length===1}>✕</button>
+                        </div>
+                      ))}
+                      <button className="chip" onClick={()=>setFCourts([...fCourts,`Court ${fCourts.length+1}`])}>+ Add</button>
+                    </div>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:600,marginBottom:4}}>Time Slots</div>
+                      {fSlots.map((s,i)=>(
+                        <div key={i} className="builder-row">
+                          <input type="time" value={s} onChange={e=>{ const a=[...fSlots]; a[i]=e.target.value; setFSlots(a) }} />
+                          <button className="btn-remove" onClick={()=>setFSlots(fSlots.filter((_,j)=>j!==i))} disabled={fSlots.length===1}>✕</button>
+                        </div>
+                      ))}
+                      <button className="chip" onClick={()=>setFSlots([...fSlots,'18:00'])}>+ Add</button>
+                    </div>
+                  </div>
+                  {fErr && <div className="error" style={{fontSize:'0.82rem',marginTop:6}}>{fErr}</div>}
+                  <div style={{display:'flex',gap:8,marginTop:8}}>
+                    <button onClick={saveFacility} disabled={fSaving||!fName.trim()} style={{flex:1}}>
+                      {fSaving ? 'Saving…' : `💾 Save`}
+                    </button>
+                    <button className="chip" onClick={()=>setShowFacilityForm(false)}>✕ Cancel</button>
+                  </div>
+                </div>
+              )}
+            </section>
+
+            <section className="builder-section">
               <h3>Courts <button className="chip" onClick={addCourt}>+ Add</button></h3>
               {courts.map((c,i)=>(
                 <div key={i} className="builder-row">
@@ -395,6 +510,144 @@ export default function App(){
             )}
           </div>
         </div>
+      </div>
+    )
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  // ── Court Grid View ──────────────────────────────────────────────────────────
+  const LEAGUE_COLORS = [
+    {bg:'#ea580c',fg:'#fff'},  // orange
+    {bg:'#2563eb',fg:'#fff'},  // blue
+    {bg:'#16a34a',fg:'#fff'},  // green
+    {bg:'#db2777',fg:'#fff'},  // pink
+    {bg:'#7c3aed',fg:'#fff'},  // purple
+    {bg:'#0891b2',fg:'#fff'},  // teal
+    {bg:'#dc2626',fg:'#fff'},  // red
+    {bg:'#ca8a04',fg:'#fff'},  // yellow
+    {bg:'#0e7490',fg:'#fff'},  // cyan
+    {bg:'#4338ca',fg:'#fff'},  // indigo
+  ]
+  function leagueColor(lid) { return LEAGUE_COLORS[(Number(lid)-1) % LEAGUE_COLORS.length] }
+
+  function CourtView({ apiBase }) {
+    const [allMatches, setAllMatches] = useState([])
+    const [leagues, setLeagues] = useState([])
+    const [leagueFilter, setLeagueFilter] = useState('all')
+    const [weekFilter, setWeekFilter] = useState('all')
+    const [loadingC, setLoadingC] = useState(false)
+    const [errC, setErrC] = useState(null)
+
+    const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+    const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+    function isoMonday(iso) {
+      const dt = new Date(iso), day = dt.getUTCDay()
+      const m = new Date(dt); m.setUTCDate(dt.getUTCDate() + (day===0?-6:1-day))
+      return m.toISOString().slice(0,10)
+    }
+    function weekLabel(w) { const d=new Date(w); return `${DAY[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]}` }
+    function fmtTime(iso) {
+      const d=new Date(iso), h=d.getUTCHours(), m=d.getUTCMinutes()
+      return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`
+    }
+
+    useEffect(() => {
+      setLoadingC(true); setErrC(null)
+      Promise.all([
+        fetch(`${apiBase}/all_matches`).then(r=>r.json()),
+        fetch(`${apiBase}/leagues`).then(r=>r.json()),
+      ]).then(([ms, ls]) => { setAllMatches(ms); setLeagues(ls) })
+        .catch(e => setErrC(String(e)))
+        .finally(() => setLoadingC(false))
+    }, [])
+
+    const allWeeks = [...new Set(allMatches.filter(m=>m.datetime).map(m=>isoMonday(m.datetime)))].sort()
+
+    const filtered = allMatches.filter(m => {
+      if (!m.datetime) return false
+      if (leagueFilter !== 'all' && String(m.league_id) !== leagueFilter) return false
+      if (weekFilter !== 'all' && isoMonday(m.datetime) !== weekFilter) return false
+      return true
+    })
+
+    const courts = [...new Set(filtered.map(m=>m.court).filter(Boolean))].sort()
+    const times  = [...new Set(filtered.map(m=>fmtTime(m.datetime)))].sort()
+
+    function matchAt(court, time) {
+      return filtered.find(m => m.court === court && fmtTime(m.datetime) === time)
+    }
+
+    return (
+      <div>
+        <div className="cal-toolbar" style={{flexWrap:'wrap',gap:8}}>
+          <label>League
+            <select value={leagueFilter} onChange={e=>setLeagueFilter(e.target.value)}>
+              <option value="all">All leagues</option>
+              {leagues.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+          </label>
+        </div>
+
+        {allWeeks.length > 1 && (
+          <div className="filter-row">
+            <span className="filter-label">Week:</span>
+            <button className={`chip${weekFilter==='all'?' chip-active':''}`} onClick={()=>setWeekFilter('all')}>All weeks</button>
+            {allWeeks.map(w=>(
+              <button key={w} className={`chip${weekFilter===w?' chip-active':''}`} onClick={()=>setWeekFilter(w)}>
+                {weekLabel(w)}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {errC && <div className="error">{errC}</div>}
+        {loadingC && <div className="cal-empty">Loading…</div>}
+        {!loadingC && courts.length === 0 && <div className="cal-empty">No matches with court assignments found.</div>}
+
+        {courts.length > 0 && (
+          <div style={{overflowX:'auto',marginTop:12}}>
+            <table style={{borderCollapse:'collapse',minWidth:'100%'}}>
+              <thead>
+                <tr>
+                  <th style={{padding:'6px 10px',background:'#1e293b',color:'#94a3b8',textAlign:'left',minWidth:70}}>Time</th>
+                  {courts.map(c=>(
+                    <th key={c} style={{padding:'6px 10px',background:'#1e293b',color:'#e2e8f0',textAlign:'center',minWidth:150}}>🏐 {c}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {times.map(t=>(
+                  <tr key={t} style={{borderBottom:'1px solid #334155'}}>
+                    <td style={{padding:'6px 10px',color:'#94a3b8',fontWeight:600,whiteSpace:'nowrap'}}>{t}</td>
+                    {courts.map(c=>{
+                      const m = matchAt(c, t)
+                      if (!m) return <td key={c} style={{padding:6}} />
+                      const col = leagueColor(m.league_id)
+                      return (
+                        <td key={c} style={{padding:4}}>
+                          <div style={{background:col.bg,color:col.fg,borderRadius:6,padding:'6px 8px',fontSize:'0.82rem',lineHeight:1.4}}>
+                            <div style={{fontWeight:700,marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.league_name||`League ${m.league_id}`}</div>
+                            <div style={{opacity:0.9}}>{m.home}</div>
+                            <div style={{opacity:0.7,fontSize:'0.75rem'}}>vs {m.away}</div>
+                          </div>
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Legend */}
+            <div style={{display:'flex',flexWrap:'wrap',gap:8,marginTop:12}}>
+              {leagues.filter(l=>filtered.some(m=>m.league_id===l.id)).map(l=>{
+                const col = leagueColor(l.id)
+                return <span key={l.id} style={{background:col.bg,color:col.fg,padding:'3px 10px',borderRadius:12,fontSize:'0.8rem',fontWeight:600}}>{l.name}</span>
+              })}
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -558,9 +811,6 @@ export default function App(){
               </div>
 
               <div className="container">
-                {view === 'courts' && (
-        <CourtView apiBase={API_BASE} />
-        )}
                 {view === 'courts' && (
         <CourtView apiBase={API_BASE} />
         )}

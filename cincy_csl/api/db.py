@@ -57,6 +57,17 @@ class League(Base):
     division = Column(String, nullable=True)
 
 
+class Facility(Base):
+    __tablename__ = "facilities"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False, unique=True)
+    # Comma-separated court names, e.g. "Court 1,Court 2,Court 3"
+    default_courts = Column(String, nullable=True)
+    # Comma-separated HH:MM start times, e.g. "18:00,19:00,20:00"
+    default_time_slots = Column(String, nullable=True)
+    address = Column(String, nullable=True)
+
+
 class Court(Base):
     __tablename__ = "courts"
     id = Column(Integer, primary_key=True)
