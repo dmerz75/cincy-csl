@@ -91,6 +91,7 @@ _DB_URL = f"sqlite:///{_DB_PATH}"
 class PreviewRequest(BaseModel):
     league_id: int
     weeks: int = 9
+    team_count: Optional[int] = None            # if set, use synthetic "Team 1"…"Team N" (no DB lookup)
     start_date: Optional[datetime] = None
     # Admin-supplied courts and time slots (overrides DB CourtAvailability when provided)
     courts: Optional[List[str]] = None          # e.g. ["Court 1", "Court 2"]
@@ -100,25 +101,31 @@ class PreviewRequest(BaseModel):
 
 @app.post("/admin/preview_schedule")
 def preview_schedule(req: PreviewRequest):
-    # create a session using local sqlite db
+    import math
     engine = create_engine(_DB_URL)
     session = get_session(engine)
 
-    # fetch league teams
-    from cincy_csl.api.db import League, Team
+    from cincy_csl.api.db import League, Team, Match as MatchModel
     league = session.get(League, req.league_id)
     if not league:
         raise HTTPException(status_code=404, detail="League not found")
 
-    teams = [t.name for t in session.query(Team).filter_by(league_id=league.id).all()]
-    if not teams:
-        raise HTTPException(status_code=400, detail="No teams in league")
+    # ── 1. Resolve teams ──────────────────────────────────────────────────────
+    if req.team_count is not None and req.team_count >= 2:
+        teams = [f"Team {i+1}" for i in range(req.team_count)]
+    else:
+        teams = [t.name for t in session.query(Team).filter_by(league_id=league.id).all()]
+        if not teams:
+            raise HTTPException(
+                status_code=400,
+                detail="No teams in league — add teams or supply team_count"
+            )
 
     rounds = generate_rounds_for_n(teams, req.weeks)
     start = req.start_date or datetime.now(timezone.utc)
     dates = schedule_dates(start, len(rounds), interval_days=7)
 
-    # build matches list
+    # ── 2. Build match list ───────────────────────────────────────────────────
     matches = []
     mid = 1
     for rd, dt in zip(rounds, dates):
@@ -126,50 +133,88 @@ def preview_schedule(req: PreviewRequest):
             matches.append((mid, a, b))
             mid += 1
 
-    # expand availabilities to slots (not persisted here)
+    # ── 3. Capacity stats ─────────────────────────────────────────────────────
+    courts_list   = req.courts or []
+    slots_list    = req.time_slots or []
+    capacity_per_week = len(courts_list) * len(slots_list)
+    total_matches = len(matches)
+    min_weeks_needed = (
+        math.ceil(total_matches / capacity_per_week) if capacity_per_week > 0 else req.weeks
+    )
+
+    # ── 4. Build slot grid ────────────────────────────────────────────────────
     slots = []
     from cincy_csl.api.db import CourtAvailability, Court
     slot_id = 1
 
     if req.courts and req.time_slots:
-        # Admin supplied courts + time slots directly — build a synthetic slot grid
-        court_names = req.courts
-        time_strs = req.time_slots
-        target_weekday = req.day_of_week  # None means use any day
+        court_names   = req.courts
+        time_strs     = req.time_slots
+        target_weekday = req.day_of_week
         for week in range(req.weeks):
             base = start + timedelta(weeks=week)
-            for ci, court_name in enumerate(court_names):
+            for court_name in court_names:
                 for ts in time_strs:
                     if target_weekday is not None:
                         days_ahead = (target_weekday - base.weekday()) % 7
-                        slot_date = base + timedelta(days=days_ahead)
+                        slot_date  = base + timedelta(days=days_ahead)
                     else:
                         slot_date = base
                     hh, mm = map(int, ts.split(":"))
-                    dt = datetime(slot_date.year, slot_date.month, slot_date.day, hh, mm, tzinfo=timezone.utc)
+                    dt = datetime(slot_date.year, slot_date.month, slot_date.day,
+                                  hh, mm, tzinfo=timezone.utc)
                     slots.append((slot_id, dt, court_name))
                     slot_id += 1
     else:
-        # Fall back to DB CourtAvailability rows
         cas = session.query(CourtAvailability).filter(CourtAvailability.recurring == 1).all()
         for week in range(req.weeks):
             base = start + timedelta(weeks=week)
             for ca in cas:
                 days_ahead = (ca.weekday - base.weekday()) % 7
-                slot_date = base + timedelta(days=days_ahead)
+                slot_date  = base + timedelta(days=days_ahead)
                 hh, mm = map(int, ca.start_time.split(":"))
-                dt = datetime(slot_date.year, slot_date.month, slot_date.day, hh, mm, tzinfo=timezone.utc)
+                dt = datetime(slot_date.year, slot_date.month, slot_date.day,
+                              hh, mm, tzinfo=timezone.utc)
                 slots.append((slot_id, dt, ca.court_id))
                 slot_id += 1
 
+    # ── 5. Cross-league conflict avoidance ────────────────────────────────────
+    # Remove any (datetime, court) pairs already taken by other leagues at
+    # the same courts, so leagues sharing a facility on the same day don't overlap.
+    slots_blocked = 0
+    if req.courts:
+        existing = (
+            session.query(MatchModel.datetime, MatchModel.court)
+            .join(Team, MatchModel.home_team)
+            .filter(Team.league_id != req.league_id)
+            .filter(MatchModel.court.in_(req.courts))
+            .filter(MatchModel.datetime.isnot(None))
+            .all()
+        )
+        taken = set()
+        for row in existing:
+            dt_key = (
+                row.datetime.replace(tzinfo=timezone.utc)
+                if row.datetime.tzinfo is None
+                else row.datetime
+            )
+            taken.add((dt_key, row.court))
+        before = len(slots)
+        slots = [(sid, dt, ct) for (sid, dt, ct) in slots if (dt, ct) not in taken]
+        slots_blocked = before - len(slots)
+
+    # ── 6. Assign and build response ──────────────────────────────────────────
     assignments = assign_matches(matches, slots)
 
     result = {
-        "matches": [],
-        "assigned": [],
-        "unassigned": [],
+        "matches":          [],
+        "assigned":         [],
+        "unassigned":       [],
+        "capacity_per_week": capacity_per_week,
+        "total_matches":    total_matches,
+        "min_weeks_needed": min_weeks_needed,
+        "slots_blocked":    slots_blocked,
     }
-    # prepare response lists
     for m in matches:
         mid = m[0]
         assigned_slot = assignments.get(mid)
@@ -179,7 +224,9 @@ def preview_schedule(req: PreviewRequest):
             result["unassigned"].append(entry)
         else:
             s = next(s for s in slots if s[0] == assigned_slot)
-            result["assigned"].append({**entry, "datetime": s[1].isoformat(), "court_id": s[2], "court": str(s[2])})
+            result["assigned"].append(
+                {**entry, "datetime": s[1].isoformat(), "court_id": s[2], "court": str(s[2])}
+            )
 
     return result
 

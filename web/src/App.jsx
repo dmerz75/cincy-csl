@@ -179,6 +179,7 @@ export default function App(){
 
     const [leagues, setLeagues] = useState([])
     const [league, setLeague] = useState('')
+    const [teamCount, setTeamCount] = useState(8)
     const [startDate, setStartDate] = useState(nextMonday)
     const [weeks, setWeeks] = useState(9)
     const [dayOfWeek, setDayOfWeek] = useState(0) // 0=Mon
@@ -302,10 +303,12 @@ export default function App(){
         const body = {
           league_id: Number(league),
           weeks: Number(weeks),
+          team_count: Number(teamCount) >= 2 ? Number(teamCount) : undefined,
           start_date: new Date(startDate).toISOString(),
           day_of_week: Number(dayOfWeek),
           courts: courts.filter(Boolean),
           time_slots: slots.filter(Boolean),
+          ...(facilityId ? { facility_id: Number(facilityId) } : {}),
         }
         const resp = await fetch(`${apiBase}/preview_schedule`,{
           method:'POST', headers:{'Content-Type':'application/json'},
@@ -374,6 +377,9 @@ export default function App(){
                   </button>
                 </div>
               )}
+              <label>Teams in league
+                <input type="number" min="2" max="32" value={teamCount} onChange={e=>setTeamCount(e.target.value)} />
+              </label>
               <label>Start date
                 <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} />
               </label>
@@ -479,7 +485,16 @@ export default function App(){
                 <div className="builder-summary">
                   <span className="summary-chip assigned">✅ {result.assigned.length} assigned</span>
                   {result.unassigned.length > 0 && <span className="summary-chip unassigned">⚠️ {result.unassigned.length} unassigned</span>}
-                  <span className="summary-chip">{weeks} weeks · {courts.length} courts · {slots.length} slots/court/week</span>
+                  <span className="summary-chip">{result.total_matches} total matches · {result.capacity_per_week} slots/week · {weeks} weeks</span>
+                  {result.slots_blocked > 0 && (
+                    <span className="summary-chip" style={{background:'#7c3aed'}}>🔒 {result.slots_blocked} slots blocked by other leagues</span>
+                  )}
+                  {result.min_weeks_needed > Number(weeks) && (
+                    <span className="summary-chip unassigned">📅 Need at least {result.min_weeks_needed} weeks to fit all matches</span>
+                  )}
+                  {result.min_weeks_needed <= Number(weeks) && result.capacity_per_week > 0 && (
+                    <span className="summary-chip" style={{background:'#166534'}}>✓ Facility fits schedule</span>
+                  )}
                 </div>
                 {grouped.map(([monday, ms])=>(
                   <div key={monday} className="week-card">
