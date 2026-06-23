@@ -58,3 +58,21 @@ footer small{color:#6b7280}
 .chip:hover{background:#dde8ff}
 .chip-active{background:var(--admin-blue);color:#fff;border-color:var(--admin-blue)}
 .week-count{font-size:0.78rem;font-weight:400;opacity:0.8;margin-left:8px}
+
+/* ── Schedule Builder ─────────────────────────────────────── */
+.builder-grid{display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:start}
+@media(max-width:700px){.builder-grid{grid-template-columns:1fr}}
+.builder-col{display:flex;flex-direction:column;gap:0}
+.builder-section{border:1px solid #dde8ff;border-radius:10px;padding:14px 16px;margin-bottom:14px;background:var(--muted)}
+.builder-section h3{margin:0 0 12px;font-size:0.95rem;color:var(--admin-dark)}
+.builder-section label{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;font-size:0.85rem;font-weight:600;color:#374151}
+.builder-section input,.builder-section select{padding:6px 10px;border:1.5px solid #c7d8f8;border-radius:7px;font-size:0.9rem;width:100%;box-sizing:border-box}
+.builder-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.builder-row input{flex:1;padding:6px 10px;border:1.5px solid #c7d8f8;border-radius:7px;font-size:0.9rem}
+.btn-remove{background:#fee2e2;color:#b91c1c;border:none;border-radius:6px;padding:5px 9px;cursor:pointer;font-weight:700}
+.btn-remove:disabled{opacity:0.4;cursor:default}
+.builder-results{min-height:120px}
+.builder-summary{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.summary-chip{padding:5px 12px;border-radius:20px;font-size:0.82rem;font-weight:600;background:#e8f0fe;color:var(--admin-blue)}
+.summary-chip.assigned{background:#dcfce7;color:#15803d}
+.summary-chip.unassigned{background:#fef3c7;color:#b45309}

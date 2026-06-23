@@ -90,8 +90,12 @@ _DB_URL = f"sqlite:///{_DB_PATH}"
 
 class PreviewRequest(BaseModel):
     league_id: int
-    weeks: int = 8
+    weeks: int = 9
     start_date: Optional[datetime] = None
+    # Admin-supplied courts and time slots (overrides DB CourtAvailability when provided)
+    courts: Optional[List[str]] = None          # e.g. ["Court 1", "Court 2"]
+    time_slots: Optional[List[str]] = None      # e.g. ["18:00", "19:00", "20:00"]
+    day_of_week: Optional[int] = None           # 0=Mon … 6=Sun (Python weekday)
 
 
 @app.post("/admin/preview_schedule")
@@ -125,17 +129,38 @@ def preview_schedule(req: PreviewRequest):
     # expand availabilities to slots (not persisted here)
     slots = []
     from cincy_csl.api.db import CourtAvailability, Court
-    cas = session.query(CourtAvailability).filter(CourtAvailability.recurring == 1).all()
     slot_id = 1
-    for week in range(req.weeks):
-        base = start + timedelta(weeks=week)
-        for ca in cas:
-            days_ahead = (ca.weekday - base.weekday()) % 7
-            slot_date = base + timedelta(days=days_ahead)
-            hh, mm = map(int, ca.start_time.split(":"))
-            dt = datetime(slot_date.year, slot_date.month, slot_date.day, hh, mm, tzinfo=timezone.utc)
-            slots.append((slot_id, dt, ca.court_id))
-            slot_id += 1
+
+    if req.courts and req.time_slots:
+        # Admin supplied courts + time slots directly — build a synthetic slot grid
+        court_names = req.courts
+        time_strs = req.time_slots
+        target_weekday = req.day_of_week  # None means use any day
+        for week in range(req.weeks):
+            base = start + timedelta(weeks=week)
+            for ci, court_name in enumerate(court_names):
+                for ts in time_strs:
+                    if target_weekday is not None:
+                        days_ahead = (target_weekday - base.weekday()) % 7
+                        slot_date = base + timedelta(days=days_ahead)
+                    else:
+                        slot_date = base
+                    hh, mm = map(int, ts.split(":"))
+                    dt = datetime(slot_date.year, slot_date.month, slot_date.day, hh, mm, tzinfo=timezone.utc)
+                    slots.append((slot_id, dt, court_name))
+                    slot_id += 1
+    else:
+        # Fall back to DB CourtAvailability rows
+        cas = session.query(CourtAvailability).filter(CourtAvailability.recurring == 1).all()
+        for week in range(req.weeks):
+            base = start + timedelta(weeks=week)
+            for ca in cas:
+                days_ahead = (ca.weekday - base.weekday()) % 7
+                slot_date = base + timedelta(days=days_ahead)
+                hh, mm = map(int, ca.start_time.split(":"))
+                dt = datetime(slot_date.year, slot_date.month, slot_date.day, hh, mm, tzinfo=timezone.utc)
+                slots.append((slot_id, dt, ca.court_id))
+                slot_id += 1
 
     assignments = assign_matches(matches, slots)
 
@@ -154,7 +179,7 @@ def preview_schedule(req: PreviewRequest):
             result["unassigned"].append(entry)
         else:
             s = next(s for s in slots if s[0] == assigned_slot)
-            result["assigned"].append({**entry, "datetime": s[1].isoformat(), "court_id": s[2]})
+            result["assigned"].append({**entry, "datetime": s[1].isoformat(), "court_id": s[2], "court": str(s[2])})
 
     return result
 

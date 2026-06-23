@@ -163,25 +163,167 @@ export default function App(){
   }
   // ─────────────────────────────────────────────────────────────────────────────
 
-  async function preview(){
-    setLoading(true)
-    setError(null)
-    setData(null)
-    try{
-      const resp = await fetch(`${API_BASE}/preview_schedule`, {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({league_id: Number(leagueId), weeks: Number(weeks)})
-      })
-      if(!resp.ok) throw new Error(await resp.text())
-      const json = await resp.json()
-      setData(json)
-    }catch(e){
-      setError(String(e))
-    }finally{
+  // ── Schedule Builder ─────────────────────────────────────────────────────────
+  function ScheduleBuilder({ apiBase }) {
+    const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
+    // default start = next Monday
+    function nextMonday() {
+      const d = new Date(); const day = d.getDay()
+      d.setDate(d.getDate() + (day === 1 ? 7 : (8 - day) % 7))
+      return d.toISOString().slice(0,10)
+    }
+
+    const [leagues, setLeagues] = useState([])
+    const [league, setLeague] = useState('')
+    const [startDate, setStartDate] = useState(nextMonday)
+    const [weeks, setWeeks] = useState(9)
+    const [dayOfWeek, setDayOfWeek] = useState(0) // 0=Mon
+    const [courts, setCourts] = useState(['Court 1','Court 2'])
+    const [slots, setSlots] = useState(['18:00','19:00','20:00'])
+    const [loading, setLoading] = useState(false)
+    const [result, setResult] = useState(null)
+    const [err, setErr] = useState(null)
+
+    useEffect(()=>{
+      fetch(`${apiBase}/leagues`).then(r=>r.json()).then(ls=>{
+        setLeagues(ls); if(ls.length) setLeague(String(ls[0].id))
+      }).catch(()=>{})
+    },[])
+
+    function addCourt()  { setCourts(c=>[...c, `Court ${c.length+1}`]) }
+    function removeCourt(i){ setCourts(c=>c.filter((_,j)=>j!==i)) }
+    function editCourt(i,v){ setCourts(c=>c.map((x,j)=>j===i?v:x)) }
+
+    function addSlot()   { setSlots(s=>[...s,'18:00']) }
+    function removeSlot(i){ setSlots(s=>s.filter((_,j)=>j!==i)) }
+    function editSlot(i,v){ setSlots(s=>s.map((x,j)=>j===i?v:x)) }
+
+    async function generate() {
+      setLoading(true); setErr(null); setResult(null)
+      try {
+        const body = {
+          league_id: Number(league),
+          weeks: Number(weeks),
+          start_date: new Date(startDate).toISOString(),
+          day_of_week: Number(dayOfWeek),
+          courts: courts.filter(Boolean),
+          time_slots: slots.filter(Boolean),
+        }
+        const resp = await fetch(`${apiBase}/preview_schedule`,{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(body)
+        })
+        if(!resp.ok) throw new Error(await resp.text())
+        setResult(await resp.json())
+      } catch(e){ setErr(String(e)) }
       setLoading(false)
     }
+
+    const DAY=['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+    const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    function fmtDt(iso){ const d=new Date(iso); const h=d.getUTCHours(),m=d.getUTCMinutes(),ap=h>=12?'PM':'AM'; return `${DAY[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]} · ${h%12||12}:${String(m).padStart(2,'0')} ${ap}` }
+
+    // Group result by week
+    function isoMon(iso){ const dt=new Date(iso),day=dt.getUTCDay(),diff=day===0?-6:1-day,m=new Date(dt); m.setUTCDate(dt.getUTCDate()+diff); return m.toISOString().slice(0,10) }
+    function weekLbl(w){ const d=new Date(w); return `Week of ${DAY[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]}` }
+    const grouped = result ? Object.entries(
+      result.assigned.reduce((acc,m)=>{ const k=isoMon(m.datetime); (acc[k]=acc[k]||[]).push(m); return acc },{})
+    ).sort(([a],[b])=>a.localeCompare(b)) : []
+
+    return (
+      <div>
+        <div className="builder-grid">
+          {/* Left column: config */}
+          <div className="builder-col">
+            <section className="builder-section">
+              <h3>League &amp; Date Range</h3>
+              <label>League
+                <select value={league} onChange={e=>setLeague(e.target.value)}>
+                  {leagues.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}
+                </select>
+              </label>
+              <label>Start date
+                <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} />
+              </label>
+              <label>Weeks
+                <input type="number" min="1" max="52" value={weeks} onChange={e=>setWeeks(e.target.value)} />
+              </label>
+              <label>Play day
+                <select value={dayOfWeek} onChange={e=>setDayOfWeek(e.target.value)}>
+                  {DAYS.map((d,i)=><option key={i} value={i}>{d}</option>)}
+                </select>
+              </label>
+            </section>
+
+            <section className="builder-section">
+              <h3>Courts <button className="chip" onClick={addCourt}>+ Add</button></h3>
+              {courts.map((c,i)=>(
+                <div key={i} className="builder-row">
+                  <input value={c} onChange={e=>editCourt(i,e.target.value)} placeholder="Court name" />
+                  <button className="btn-remove" onClick={()=>removeCourt(i)} disabled={courts.length===1}>✕</button>
+                </div>
+              ))}
+            </section>
+
+            <section className="builder-section">
+              <h3>Time Slots <button className="chip" onClick={addSlot}>+ Add</button></h3>
+              {slots.map((s,i)=>(
+                <div key={i} className="builder-row">
+                  <input type="time" value={s} onChange={e=>editSlot(i,e.target.value)} />
+                  <button className="btn-remove" onClick={()=>removeSlot(i)} disabled={slots.length===1}>✕</button>
+                </div>
+              ))}
+            </section>
+
+            <button onClick={generate} disabled={loading} style={{width:'100%',marginTop:8,padding:'10px 0',fontSize:'1rem'}}>
+              {loading ? 'Generating…' : '⚡ Generate Schedule'}
+            </button>
+            {err && <div className="error" style={{marginTop:8}}>{err}</div>}
+          </div>
+
+          {/* Right column: results */}
+          <div className="builder-results">
+            {!result && !loading && <div className="cal-empty">Configure options and click Generate.</div>}
+            {result && (
+              <>
+                <div className="builder-summary">
+                  <span className="summary-chip assigned">✅ {result.assigned.length} assigned</span>
+                  {result.unassigned.length > 0 && <span className="summary-chip unassigned">⚠️ {result.unassigned.length} unassigned</span>}
+                  <span className="summary-chip">{weeks} weeks · {courts.length} courts · {slots.length} slots/court/week</span>
+                </div>
+                {grouped.map(([monday, ms])=>(
+                  <div key={monday} className="week-card">
+                    <div className="week-header">{weekLbl(monday)} <span className="week-count">{ms.length} match{ms.length!==1?'es':''}</span></div>
+                    <div className="match-grid">
+                      {ms.sort((a,b)=>a.datetime.localeCompare(b.datetime)).map(m=>(
+                        <div key={m.id} className="match-pill">
+                          <div className="match-date">{fmtDt(m.datetime)}</div>
+                          <div className="match-teams">
+                            <span className="team home">{m.home}</span>
+                            <span className="vs">vs</span>
+                            <span className="team away">{m.away}</span>
+                          </div>
+                          {m.court && <div className="court-badge">🏐 {m.court}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {result.unassigned.length > 0 && (
+                  <div className="week-card" style={{borderColor:'#fbbf24'}}>
+                    <div className="week-header" style={{background:'#d97706'}}>⚠️ Unassigned ({result.unassigned.length})</div>
+                    <table style={{margin:'12px'}}><thead><tr><th>Home</th><th>Away</th></tr></thead>
+                    <tbody>{result.unassigned.map(u=><tr key={u.id}><td>{u.home}</td><td>{u.away}</td></tr>)}</tbody></table>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    )
   }
+  // ─────────────────────────────────────────────────────────────────────────────
 
   function SchedulesView({apiBase}){
     const [league, setLeague] = useState(leagueId)
@@ -335,7 +477,7 @@ export default function App(){
           </header>
               <div className="nav">
                 <button onClick={()=>setView('calendar')} className={view==='calendar'?'active':''}>📅 Calendar</button>
-                <button onClick={()=>setView('preview')} className={view==='preview'?'active':''}>Schedule Preview</button>
+                <button onClick={()=>setView('preview')} className={view==='preview'?'active':''}>🗓 Schedule Builder</button>
                 <button onClick={()=>setView('schedules')} className={view==='schedules'?'active':''}>Current Schedules</button>
               </div>
 
@@ -344,12 +486,8 @@ export default function App(){
         <WeeklyCalendar apiBase={API_BASE} />
         )}
                 {view === 'preview' && (
-      <div className="controls">
-        <label>League ID <input type="number" value={leagueId} onChange={e=>setLeagueId(e.target.value)} /></label>
-        <label>Weeks <input type="number" value={weeks} onChange={e=>setWeeks(e.target.value)} /></label>
-        <button onClick={preview} disabled={loading}>{loading ? 'Loading...' : 'Preview'}</button>
-      </div>
-      )}
+        <ScheduleBuilder apiBase={API_BASE} />
+        )}
       {error && <div className="error">Error: {error}</div>}
       
       {view === 'schedules' && (
