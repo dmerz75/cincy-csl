@@ -257,11 +257,28 @@ export default function App(){
     // Auto-compose league name from parts
     const composedName = `${newDay}-${newLevel}-${newGender}`
 
+    const [deleting, setDeleting] = useState(false)
+
     async function loadLeagues() {
       const resp = await fetch(`${apiBase}/leagues`)
       const ls = await resp.json()
       setLeagues(ls)
       if (ls.length && !league) setLeague(String(ls[0].id))
+    }
+
+    async function deleteLeague() {
+      if (!league) return
+      const name = leagues.find(l=>String(l.id)===String(league))?.name || `League ${league}`
+      if (!window.confirm(`Delete "${name}" and all its teams and matches? This cannot be undone.`)) return
+      setDeleting(true)
+      try {
+        const resp = await fetch(`${apiBase}/leagues/${league}`, { method: 'DELETE' })
+        if (!resp.ok) throw new Error(await resp.text())
+        await loadLeagues()
+        setLeague('')
+        setResult(null)
+      } catch(e) { setErr(String(e)) }
+      setDeleting(false)
     }
 
     useEffect(() => { loadLeagues(); loadFacilities() }, [])
@@ -347,6 +364,12 @@ export default function App(){
                   <button className="chip" style={{whiteSpace:'nowrap'}} onClick={()=>setShowCreate(v=>!v)}>
                     {showCreate ? '✕ Cancel' : '+ New'}
                   </button>
+                  {league && !showCreate && (
+                    <button className="btn-remove" title="Delete league" onClick={deleteLeague} disabled={deleting}
+                      style={{padding:'4px 8px',fontSize:'1rem'}}>
+                      {deleting ? '…' : '🗑'}
+                    </button>
+                  )}
                 </div>
               </label>
 

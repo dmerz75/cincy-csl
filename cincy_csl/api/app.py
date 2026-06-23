@@ -314,6 +314,25 @@ def create_league(req: CreateLeagueRequest):
     return {"id": league.id, "name": league.name, "day_of_week": league.day_of_week, "division": league.division}
 
 
+@app.delete("/admin/leagues/{league_id}", status_code=204)
+def delete_league(league_id: int):
+    engine = create_engine(_DB_URL)
+    session = get_session(engine)
+    from cincy_csl.api.db import League, Team, Match as MatchModel
+    league = session.get(League, league_id)
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+    # Delete matches belonging to teams in this league
+    team_ids = [t.id for t in session.query(Team).filter_by(league_id=league_id).all()]
+    if team_ids:
+        session.query(MatchModel).filter(
+            (MatchModel.home_team_id.in_(team_ids)) | (MatchModel.away_team_id.in_(team_ids))
+        ).delete(synchronize_session=False)
+        session.query(Team).filter(Team.league_id == league_id).delete(synchronize_session=False)
+    session.delete(league)
+    session.commit()
+
+
 # ── Facilities ────────────────────────────────────────────────────────────────
 
 class FacilityRequest(BaseModel):
@@ -435,6 +454,11 @@ def api_list_leagues():
 @app.post("/api/admin/leagues", status_code=201)
 def api_create_league(req: CreateLeagueRequest):
     return create_league(req)
+
+
+@app.delete("/api/admin/leagues/{league_id}", status_code=204)
+def api_delete_league(league_id: int):
+    return delete_league(league_id)
 
 
 @app.get("/api/admin/facilities")
