@@ -476,12 +476,19 @@ export default function App(){
             </div>
           </header>
               <div className="nav">
+                <button onClick={()=>setView('courts')} className={view==='courts'?'active':''}>🏟 Court View</button>
                 <button onClick={()=>setView('calendar')} className={view==='calendar'?'active':''}>📅 Calendar</button>
                 <button onClick={()=>setView('preview')} className={view==='preview'?'active':''}>🗓 Schedule Builder</button>
                 <button onClick={()=>setView('schedules')} className={view==='schedules'?'active':''}>Current Schedules</button>
               </div>
 
               <div className="container">
+                {view === 'courts' && (
+        <CourtView apiBase={API_BASE} />
+        )}
+                {view === 'courts' && (
+        <CourtView apiBase={API_BASE} />
+        )}
                 {view === 'calendar' && (
         <WeeklyCalendar apiBase={API_BASE} />
         )}

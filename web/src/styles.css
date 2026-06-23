@@ -76,3 +76,17 @@ footer small{color:#6b7280}
 .summary-chip{padding:5px 12px;border-radius:20px;font-size:0.82rem;font-weight:600;background:#e8f0fe;color:var(--admin-blue)}
 .summary-chip.assigned{background:#dcfce7;color:#15803d}
 .summary-chip.unassigned{background:#fef3c7;color:#b45309}
+
+/* ── Court Grid View ──────────────────────────────────────── */
+.court-grid{display:grid;gap:0;border:1.5px solid #dde8ff;border-radius:12px;overflow:auto;margin-top:12px;max-width:100%}
+.cg-corner{background:#f8faff;border-bottom:1.5px solid #dde8ff;border-right:1.5px solid #dde8ff;padding:10px}
+.cg-court-header{background:linear-gradient(90deg,var(--admin-blue),var(--admin-dark));color:#fff;font-weight:700;font-size:0.88rem;padding:10px 12px;text-align:center;border-right:1.5px solid rgba(255,255,255,0.2)}
+.cg-court-header:last-child{border-right:none}
+.cg-time{background:#f8faff;border-right:1.5px solid #dde8ff;border-bottom:1px solid #eef4ff;padding:8px 10px;font-size:0.78rem;font-weight:700;color:var(--admin-blue);white-space:nowrap;text-align:right;vertical-align:top}
+.cg-cell{border-right:1.5px solid #eef4ff;border-bottom:1px solid #eef4ff;padding:6px;min-height:48px;vertical-align:top}
+.cg-cell:last-child{border-right:none}
+.cg-empty-cell{height:40px}
+.cg-game{border-radius:7px;padding:6px 9px;margin-bottom:5px;font-size:0.82rem;cursor:default;transition:box-shadow .12s}
+.cg-game:hover{box-shadow:0 2px 10px rgba(0,0,0,0.12)}
+.cg-league{font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;opacity:0.75;margin-bottom:2px}
+.cg-matchup{font-weight:700;line-height:1.3}

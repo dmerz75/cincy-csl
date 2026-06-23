@@ -327,6 +327,38 @@ def api_export_csv(league_id: int, day: Optional[int] = None):
 def api_preview_schedule(req: PreviewRequest):
     return preview_schedule(req)
 
+
+@app.get("/api/admin/all_matches")
+def api_all_matches():
+    """Return all persisted matches across every league, with league_id and league_name."""
+    engine = create_engine(_DB_URL)
+    session = get_session(engine)
+    from cincy_csl.api.db import Match, Team, League
+
+    rows = (
+        session.query(Match, Team, League)
+        .join(Team, Match.home_team)
+        .join(League, Team.league_id == League.id)
+        .filter(Match.datetime.isnot(None))
+        .all()
+    )
+
+    out = []
+    for m, home_team, league in rows:
+        away = session.get(Team, m.away_team_id).name if m.away_team_id else None
+        out.append({
+            "id": m.id,
+            "home": home_team.name,
+            "away": away,
+            "datetime": m.datetime.isoformat(),
+            "court": m.court,
+            "court_id": m.court_id,
+            "status": m.status,
+            "league_id": league.id,
+            "league_name": league.name,
+        })
+    return out
+
 # If a built React app exists at web/dist, serve it at /admin (static)
 if dist_dir.exists():
     app.mount("/admin", StaticFiles(directory=str(dist_dir), html=True), name="admin")
