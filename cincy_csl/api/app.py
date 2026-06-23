@@ -83,6 +83,10 @@ async def ip_whitelist_middleware(request: Request, call_next):
 # Path to built React app (if present)
 dist_dir = Path(__file__).parents[2] / "web" / "dist"
 
+# Absolute path to the SQLite DB, relative to this file's project root
+_DB_PATH = str(Path(__file__).parents[2] / "cincy_csl.db")
+_DB_URL = f"sqlite:///{_DB_PATH}"
+
 
 class PreviewRequest(BaseModel):
     league_id: int
@@ -93,7 +97,7 @@ class PreviewRequest(BaseModel):
 @app.post("/admin/preview_schedule")
 def preview_schedule(req: PreviewRequest):
     # create a session using local sqlite db
-    engine = create_engine("sqlite:///cincy_csl.db")
+    engine = create_engine(_DB_URL)
     session = get_session(engine)
 
     # fetch league teams
@@ -159,7 +163,7 @@ def preview_schedule(req: PreviewRequest):
 def export_csv(league_id: int, day: Optional[int] = None):
     """Export matches for a league as CSV. `day` is optional and should be 0..6 (JavaScript-style: 0=Sunday..6=Saturday).
     If `day` is provided it'll filter matches to that weekday (UTC)."""
-    engine = create_engine("sqlite:///cincy_csl.db")
+    engine = create_engine(_DB_URL)
     session = get_session(engine)
 
     from cincy_csl.api.db import Match, Team
@@ -208,7 +212,7 @@ def export_csv(league_id: int, day: Optional[int] = None):
 
 @app.get("/admin/leagues")
 def list_leagues():
-    engine = create_engine("sqlite:///cincy_csl.db")
+    engine = create_engine(_DB_URL)
     session = get_session(engine)
     from cincy_csl.api.db import League
 
@@ -221,7 +225,7 @@ def list_leagues():
 
 @app.get("/admin/teams")
 def list_teams(league_id: Optional[int] = Query(None)):
-    engine = create_engine("sqlite:///cincy_csl.db")
+    engine = create_engine(_DB_URL)
     session = get_session(engine)
     from cincy_csl.api.db import Team
 
@@ -238,7 +242,7 @@ def list_teams(league_id: Optional[int] = Query(None)):
 @app.get("/admin/schedules")
 def get_schedules(league_id: int, day: Optional[int] = Query(None)):
     """Return persisted matches for a league. Optional `day` filters by JS weekday 0=Sun..6=Sat."""
-    engine = create_engine("sqlite:///cincy_csl.db")
+    engine = create_engine(_DB_URL)
     session = get_session(engine)
     from cincy_csl.api.db import Match, Team
 

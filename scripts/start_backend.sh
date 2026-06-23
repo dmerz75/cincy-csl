@@ -33,4 +33,5 @@ fi
 
 echo "Activating venv and starting uvicorn on port $PORT..."
 . "$VENV/bin/activate"
+cd "$ROOT_DIR"
 exec env PYTHONPATH="$ROOT_DIR" uvicorn cincy_csl.api.app:app --reload --port "$PORT" --app-dir "$ROOT_DIR"
