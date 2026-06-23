@@ -104,7 +104,11 @@ export default function App(){
 
         {err     && <div className="error">{err}</div>}
         {loading && <div className="cal-empty">Loading…</div>}
-        {!loading && filtered.length === 0 && <div className="cal-empty">No matches found.</div>}
+        {!loading && filtered.length === 0 && (
+          <div className="cal-empty">
+            No matches found. Use <strong>🗓 Schedule Builder</strong> to generate a schedule, then click <strong>💾 Save Schedule to DB</strong>.
+          </div>
+        )}
 
         {/* ── Compact week rows ── */}
         {!loading && weeks.length > 0 && (
@@ -180,6 +184,8 @@ export default function App(){
     const [loading, setLoading] = useState(false)
     const [result, setResult] = useState(null)
     const [err, setErr] = useState(null)
+    const [saving, setSaving] = useState(false)
+    const [saveMsg, setSaveMsg] = useState(null)
 
     // Facility state
     const [facilities, setFacilities] = useState([])
@@ -330,7 +336,28 @@ export default function App(){
       setLoading(false)
     }
 
-    const DAY=['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+    async function saveSchedule() {
+      setSaving(true); setSaveMsg(null)
+      try {
+        const body = {
+          league_id: Number(league),
+          weeks: Number(weeks),
+          team_count: Number(teamCount) >= 2 ? Number(teamCount) : undefined,
+          start_date: new Date(startDate).toISOString(),
+          day_of_week: Number(dayOfWeek),
+          courts: courts.filter(Boolean),
+          time_slots: slots.filter(Boolean),
+        }
+        const resp = await fetch(`${apiBase}/save_schedule`, {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify(body)
+        })
+        if (!resp.ok) throw new Error(await resp.text())
+        const r = await resp.json()
+        setSaveMsg(`✅ Saved ${r.saved} matches for ${r.league_name}`)
+      } catch(e) { setSaveMsg(`❌ ${String(e)}`) }
+      setSaving(false)
+    }
     const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
     function fmtDt(iso){ const d=new Date(iso); const h=d.getUTCHours(),m=d.getUTCMinutes(),ap=h>=12?'PM':'AM'; return `${DAY[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]} · ${h%12||12}:${String(m).padStart(2,'0')} ${ap}` }
 
@@ -490,6 +517,10 @@ export default function App(){
             <button onClick={generate} disabled={loading} style={{width:'100%',marginTop:8,padding:'10px 0',fontSize:'1rem'}}>
               {loading ? 'Generating…' : '⚡ Generate Schedule'}
             </button>
+            <button onClick={saveSchedule} disabled={saving||!league} style={{width:'100%',marginTop:6,padding:'10px 0',fontSize:'1rem',background:'#166534',borderColor:'#16a34a'}}>
+              {saving ? 'Saving…' : '💾 Save Schedule to DB'}
+            </button>
+            {saveMsg && <div style={{marginTop:6,padding:'8px',borderRadius:6,background:'#1e293b',fontSize:'0.85rem'}}>{saveMsg}</div>}
             {err && <div className="error" style={{marginTop:8}}>{err}</div>}
           </div>
 
