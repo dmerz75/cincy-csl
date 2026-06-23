@@ -13,38 +13,27 @@ export default function App(){
   // ── Weekly Calendar ──────────────────────────────────────────────────────────
   function WeeklyCalendar({ apiBase }) {
     const [league, setLeague] = useState(leagueId)
+    const [leagues, setLeagues] = useState([])
     const [loadingC, setLoadingC] = useState(false)
     const [matches, setMatches] = useState(null)
     const [errC, setErrC] = useState(null)
+    const [courtFilter, setCourtFilter] = useState('all')
+    const [weekFilter, setWeekFilter] = useState('all')
 
-    useEffect(() => { load(league) }, [])
+    useEffect(() => {
+      fetch(`${apiBase}/leagues`).then(r=>r.json()).then(setLeagues).catch(()=>{})
+    }, [])
+    useEffect(() => { load(league) }, [league])
 
     async function load(lid) {
       setLoadingC(true); setErrC(null); setMatches(null)
+      setCourtFilter('all'); setWeekFilter('all')
       try {
         const resp = await fetch(`${apiBase}/schedules?league_id=${lid}`)
         if (!resp.ok) throw new Error(await resp.text())
         setMatches(await resp.json())
       } catch(e) { setErrC(String(e)) }
       setLoadingC(false)
-    }
-
-    // Group assigned matches by ISO week label ("Week of Mon DD MMM")
-    function groupByWeek(ms) {
-      const weeks = {}
-      for (const m of (ms || [])) {
-        if (!m.datetime) continue
-        const dt = new Date(m.datetime)
-        // Monday of this match's week
-        const day = dt.getUTCDay() // 0=Sun
-        const diff = (day === 0 ? -6 : 1 - day)
-        const mon = new Date(dt)
-        mon.setUTCDate(dt.getUTCDate() + diff)
-        const key = mon.toISOString().slice(0, 10)
-        if (!weeks[key]) weeks[key] = []
-        weeks[key].push(m)
-      }
-      return Object.entries(weeks).sort(([a],[b]) => a.localeCompare(b))
     }
 
     const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
@@ -60,30 +49,99 @@ export default function App(){
       const ampm = h >= 12 ? 'PM' : 'AM'
       return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${ampm}`
     }
-    function weekLabel(isoMonday) {
-      const d = new Date(isoMonday)
+    function isoMonday(iso) {
+      const dt = new Date(iso)
+      const day = dt.getUTCDay()
+      const diff = day === 0 ? -6 : 1 - day
+      const mon = new Date(dt)
+      mon.setUTCDate(dt.getUTCDate() + diff)
+      return mon.toISOString().slice(0, 10)
+    }
+    function weekLabel(isoMon) {
+      const d = new Date(isoMon)
       return `Week of ${DAY[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]}`
     }
 
-    const weeks = groupByWeek(matches)
+    // Derive unique courts and weeks from loaded matches
+    const allMatches = (matches || []).filter(m => m.datetime)
+    const courts = ['all', ...Array.from(new Set(allMatches.map(m=>m.court).filter(Boolean))).sort()]
+    const allWeeks = [...new Set(allMatches.map(m=>isoMonday(m.datetime)))].sort()
+    const weekOptions = ['all', ...allWeeks]
+
+    // Apply filters
+    const filtered = allMatches
+      .filter(m => courtFilter === 'all' || m.court === courtFilter)
+      .filter(m => weekFilter === 'all' || isoMonday(m.datetime) === weekFilter)
+
+    // Group into weeks
+    function groupByWeek(ms) {
+      const map = {}
+      for (const m of ms) {
+        const key = isoMonday(m.datetime)
+        if (!map[key]) map[key] = []
+        map[key].push(m)
+      }
+      return Object.entries(map).sort(([a],[b]) => a.localeCompare(b))
+    }
+    const grouped = groupByWeek(filtered)
 
     return (
       <div>
+        {/* ── Toolbar ── */}
         <div className="cal-toolbar">
-          <label>League ID
-            <input type="number" value={league} onChange={e=>{ setLeague(e.target.value); load(e.target.value) }} />
+          <label>League
+            <select value={league} onChange={e=>setLeague(e.target.value)}>
+              {leagues.length === 0
+                ? <option value={league}>League {league}</option>
+                : leagues.map(l=><option key={l.id} value={l.id}>{l.name}</option>)
+              }
+            </select>
           </label>
           <button onClick={()=>load(league)} disabled={loadingC}>{loadingC ? 'Loading…' : 'Refresh'}</button>
-          <button onClick={()=>{ const u=`${apiBase}/export_csv?league_id=${league}`; window.open(u,'_blank') }}>Export CSV</button>
+          <button onClick={()=>{ window.open(`${apiBase}/export_csv?league_id=${league}`,'_blank') }}>Export CSV</button>
         </div>
+
+        {/* ── Court filter chips ── */}
+        {courts.length > 1 && (
+          <div className="filter-row">
+            <span className="filter-label">Court:</span>
+            {courts.map(c => (
+              <button key={c}
+                className={`chip${courtFilter===c?' chip-active':''}`}
+                onClick={()=>setCourtFilter(c)}>
+                {c === 'all' ? 'All courts' : `🏐 ${c}`}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* ── Week filter chips ── */}
+        {allWeeks.length > 1 && (
+          <div className="filter-row">
+            <span className="filter-label">Week:</span>
+            <button className={`chip${weekFilter==='all'?' chip-active':''}`} onClick={()=>setWeekFilter('all')}>All weeks</button>
+            {allWeeks.map(w => (
+              <button key={w}
+                className={`chip${weekFilter===w?' chip-active':''}`}
+                onClick={()=>setWeekFilter(w)}>
+                {weekLabel(w)}
+              </button>
+            ))}
+          </div>
+        )}
+
         {errC && <div className="error">{errC}</div>}
         {loadingC && <div className="cal-empty">Loading schedule…</div>}
-        {!loadingC && matches && matches.length === 0 && (
+        {!loadingC && matches && allMatches.length === 0 && (
           <div className="cal-empty">No matches found. Run <code>schedule_with_courts.py</code> to generate a schedule.</div>
         )}
-        {weeks.map(([monday, ms]) => (
+        {!loadingC && matches && allMatches.length > 0 && filtered.length === 0 && (
+          <div className="cal-empty">No matches match the selected filters.</div>
+        )}
+
+        {grouped.map(([monday, ms]) => (
           <div key={monday} className="week-card">
-            <div className="week-header">{weekLabel(monday)}</div>
+            <div className="week-header">{weekLabel(monday)} <span className="week-count">{ms.length} match{ms.length!==1?'es':''}</span></div>
             <div className="match-grid">
               {ms.sort((a,b)=>a.datetime.localeCompare(b.datetime)).map(m => (
                 <div key={m.id} className="match-pill">

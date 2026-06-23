@@ -50,3 +50,11 @@ footer small{color:#6b7280}
 .team.away{color:#1a5fb4}
 .vs{font-size:0.75rem;color:#6b7280;font-weight:400}
 .court-badge{margin-top:6px;font-size:0.78rem;background:#e8f0fe;color:var(--admin-blue);border-radius:6px;padding:3px 8px;display:inline-block;font-weight:600}
+
+/* ── Filter chips ─────────────────────────────────────────── */
+.filter-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.filter-label{font-size:0.8rem;font-weight:700;color:#6b7280;min-width:44px}
+.chip{background:#f0f4ff;color:var(--admin-blue);border:1.5px solid #c7d8f8;padding:5px 12px;border-radius:20px;font-size:0.82rem;font-weight:600;cursor:pointer;transition:background .12s,color .12s}
+.chip:hover{background:#dde8ff}
+.chip-active{background:var(--admin-blue);color:#fff;border-color:var(--admin-blue)}
+.week-count{font-size:0.78rem;font-weight:400;opacity:0.8;margin-left:8px}
