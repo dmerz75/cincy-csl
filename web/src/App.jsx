@@ -7,7 +7,7 @@ export default function App(){
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
 
-  const API_BASE = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000') + '/api/admin'
+  const API_BASE = (import.meta.env.VITE_API_URL || '') + '/api/admin'
   const [view, setView] = useState('home') // 'home' | 'preview' | 'schedules'
 
   async function preview(){
