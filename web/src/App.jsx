@@ -314,7 +314,8 @@ export default function App(){
     function editSlot(i,v){ setSlots(s=>s.map((x,j)=>j===i?v:x)) }
 
     async function generate() {
-      setLoading(true); setErr(null); setResult(null)
+      if (!league) { setErr('Select a league first'); return }
+      setLoading(true); setErr(null); setResult(null); setSaveMsg(null)
       try {
         const body = {
           league_id: Number(league),
@@ -337,18 +338,20 @@ export default function App(){
     }
 
     async function saveSchedule() {
+      if (!result || !league) return
       setSaving(true); setSaveMsg(null)
       try {
         const body = {
           league_id: Number(league),
-          weeks: Number(weeks),
           team_count: Number(teamCount) >= 2 ? Number(teamCount) : undefined,
-          start_date: new Date(startDate).toISOString(),
-          day_of_week: Number(dayOfWeek),
-          courts: courts.filter(Boolean),
-          time_slots: slots.filter(Boolean),
+          matches: result.assigned.map(m => ({
+            home: m.home,
+            away: m.away,
+            datetime: m.datetime,
+            court: m.court || null,
+          }))
         }
-        const resp = await fetch(`${apiBase}/save_schedule`, {
+        const resp = await fetch(`${apiBase}/commit_schedule`, {
           method: 'POST', headers: {'Content-Type':'application/json'},
           body: JSON.stringify(body)
         })
@@ -514,11 +517,11 @@ export default function App(){
               ))}
             </section>
 
-            <button onClick={generate} disabled={loading} style={{width:'100%',marginTop:8,padding:'10px 0',fontSize:'1rem'}}>
+            <button onClick={generate} disabled={loading||!league} style={{width:'100%',marginTop:8,padding:'10px 0',fontSize:'1rem'}}>
               {loading ? 'Generating…' : '⚡ Generate Schedule'}
             </button>
-            <button onClick={saveSchedule} disabled={saving||!league} style={{width:'100%',marginTop:6,padding:'10px 0',fontSize:'1rem',background:'#166534',borderColor:'#16a34a'}}>
-              {saving ? 'Saving…' : '💾 Save Schedule to DB'}
+            <button onClick={saveSchedule} disabled={saving||!result||!result.assigned.length} style={{width:'100%',marginTop:6,padding:'10px 0',fontSize:'1rem',background: result&&result.assigned.length?'#166534':'#374151',borderColor: result&&result.assigned.length?'#16a34a':'#4b5563',cursor:result&&result.assigned.length?'pointer':'not-allowed'}}>
+              {saving ? 'Saving…' : '💾 Save to Calendar'}
             </button>
             {saveMsg && <div style={{marginTop:6,padding:'8px',borderRadius:6,background:'#1e293b',fontSize:'0.85rem'}}>{saveMsg}</div>}
             {err && <div className="error" style={{marginTop:8}}>{err}</div>}

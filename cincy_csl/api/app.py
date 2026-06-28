@@ -496,20 +496,22 @@ def api_preview_schedule(req: PreviewRequest):
     return preview_schedule(req)
 
 
-class SaveScheduleRequest(BaseModel):
+class CommitMatchEntry(BaseModel):
+    home: str
+    away: str
+    datetime: Optional[str] = None
+    court: Optional[str] = None
+
+
+class CommitScheduleRequest(BaseModel):
     league_id: int
-    team_count: Optional[int] = None
-    start_date: Optional[datetime] = None
-    courts: Optional[List[str]] = None
-    time_slots: Optional[List[str]] = None
-    day_of_week: Optional[int] = None
-    weeks: int = 9
+    team_count: Optional[int] = None   # if set, creates/replaces synthetic teams
+    matches: List[CommitMatchEntry]    # the assigned matches from the preview
 
 
-@app.post("/api/admin/save_schedule", status_code=201)
-def save_schedule(req: SaveScheduleRequest):
-    """Generate and persist a schedule to the DB, replacing any existing matches for the league."""
-    import math
+@app.post("/api/admin/commit_schedule", status_code=201)
+def commit_schedule(req: CommitScheduleRequest):
+    """Persist a previewed schedule to the DB exactly as shown."""
     engine = create_engine(_DB_URL)
     session = get_session(engine)
     from cincy_csl.api.db import League, Team, Match as MatchModel
@@ -518,90 +520,53 @@ def save_schedule(req: SaveScheduleRequest):
     if not league:
         raise HTTPException(status_code=404, detail="League not found")
 
-    # Resolve teams — create synthetic ones if team_count given
     existing_teams = session.query(Team).filter_by(league_id=req.league_id).all()
-    if req.team_count and req.team_count >= 2:
-        # Clear existing teams + their matches first
-        team_ids = [t.id for t in existing_teams]
-        if team_ids:
-            session.query(MatchModel).filter(
-                (MatchModel.home_team_id.in_(team_ids)) | (MatchModel.away_team_id.in_(team_ids))
-            ).delete(synchronize_session=False)
-            session.query(Team).filter(Team.league_id == req.league_id).delete(synchronize_session=False)
-        teams_objs = []
-        for i in range(req.team_count):
-            t = Team(name=f"{league.name} Team {i+1}", league_id=req.league_id)
-            session.add(t)
-        session.commit()
-        teams_objs = session.query(Team).filter_by(league_id=req.league_id).all()
-    else:
-        if not existing_teams:
-            raise HTTPException(status_code=400, detail="No teams in league and no team_count provided")
-        team_ids = [t.id for t in existing_teams]
-        # Delete old matches
+    team_ids = [t.id for t in existing_teams]
+
+    # Always clear old matches for this league first
+    if team_ids:
         session.query(MatchModel).filter(
             (MatchModel.home_team_id.in_(team_ids)) | (MatchModel.away_team_id.in_(team_ids))
         ).delete(synchronize_session=False)
+
+    # If team_count given, replace synthetic teams to match
+    if req.team_count and req.team_count >= 2:
+        if team_ids:
+            session.query(Team).filter(Team.league_id == req.league_id).delete(synchronize_session=False)
+        for i in range(req.team_count):
+            session.add(Team(name=f"{league.name} Team {i+1}", league_id=req.league_id))
         session.commit()
-        teams_objs = existing_teams
 
-    team_map = {t.name: t.id for t in teams_objs}
-    team_names = list(team_map.keys())
+    # Build name → id map (includes any newly created teams)
+    all_teams = session.query(Team).filter_by(league_id=req.league_id).all()
+    team_map = {t.name: t.id for t in all_teams}
 
-    rounds = generate_rounds_for_n(team_names, req.weeks)
-    start = req.start_date or datetime.now(timezone.utc)
-    dates = schedule_dates(start, len(rounds), interval_days=7)
-
-    # Build slot grid
-    slots = []
-    slot_id = 1
-    if req.courts and req.time_slots:
-        target_weekday = req.day_of_week
-        for week in range(req.weeks):
-            base = start + timedelta(weeks=week)
-            for court_name in req.courts:
-                for ts in req.time_slots:
-                    if target_weekday is not None:
-                        days_ahead = (target_weekday - base.weekday()) % 7
-                        slot_date = base + timedelta(days=days_ahead)
-                    else:
-                        slot_date = base
-                    hh, mm = map(int, ts.split(":"))
-                    dt = datetime(slot_date.year, slot_date.month, slot_date.day,
-                                  hh, mm, tzinfo=timezone.utc)
-                    slots.append((slot_id, dt, court_name))
-                    slot_id += 1
-
-    matches_raw = []
-    mid = 1
-    for rd, dt in zip(rounds, dates):
-        for a, b in rd:
-            matches_raw.append((mid, a, b))
-            mid += 1
-
-    assignments = assign_matches(matches_raw, slots)
+    # Upsert teams that appear in the match list but aren’t in the DB yet
+    needed = set()
+    for m in req.matches:
+        needed.add(m.home); needed.add(m.away)
+    for name in needed:
+        if name not in team_map:
+            t = Team(name=name, league_id=req.league_id)
+            session.add(t)
+    session.commit()
+    all_teams = session.query(Team).filter_by(league_id=req.league_id).all()
+    team_map = {t.name: t.id for t in all_teams}
 
     saved = 0
-    for m in matches_raw:
-        mid, home_name, away_name = m
-        home_id = team_map.get(home_name)
-        away_id = team_map.get(away_name)
+    for m in req.matches:
+        home_id = team_map.get(m.home)
+        away_id = team_map.get(m.away)
         if not home_id or not away_id:
             continue
-        assigned_slot = assignments.get(mid)
-        dt_val, court_val = None, None
-        if assigned_slot:
-            s = next((s for s in slots if s[0] == assigned_slot), None)
-            if s:
-                dt_val, court_val = s[1], s[2]
-        row = MatchModel(
+        dt_val = datetime.fromisoformat(m.datetime.replace('Z','+00:00')) if m.datetime else None
+        session.add(MatchModel(
             home_team_id=home_id,
             away_team_id=away_id,
             datetime=dt_val,
-            court=court_val,
+            court=m.court,
             status="scheduled",
-        )
-        session.add(row)
+        ))
         saved += 1
 
     session.commit()
