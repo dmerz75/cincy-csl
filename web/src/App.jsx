@@ -349,6 +349,7 @@ export default function App(){
             away: m.away,
             datetime: m.datetime,
             court: m.court || null,
+            facility_id: m.facility_id || Number(facilityId) || null,
           }))
         }
         const resp = await fetch(`${apiBase}/commit_schedule`, {

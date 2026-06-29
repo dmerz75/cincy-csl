@@ -32,9 +32,11 @@ class Match(Base):
     court = Column(String, nullable=True)
     status = Column(String, default="scheduled")
     court_id = Column(Integer, ForeignKey("courts.id"), nullable=True)
+    facility_id = Column(Integer, ForeignKey("facilities.id"), nullable=True)
 
     home_team = relationship("Team", foreign_keys=[home_team_id])
     away_team = relationship("Team", foreign_keys=[away_team_id])
+    facility = relationship("Facility", foreign_keys=[facility_id])
 
 
 class Player(Base):

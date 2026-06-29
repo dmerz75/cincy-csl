@@ -97,6 +97,7 @@ class PreviewRequest(BaseModel):
     courts: Optional[List[str]] = None          # e.g. ["Court 1", "Court 2"]
     time_slots: Optional[List[str]] = None      # e.g. ["18:00", "19:00", "20:00"]
     day_of_week: Optional[int] = None           # 0=Mon … 6=Sun (Python weekday)
+    facility_id: Optional[int] = None           # auto-populates courts/time_slots from facility defaults if not explicitly set
 
 
 @app.post("/admin/preview_schedule")
@@ -132,6 +133,21 @@ def preview_schedule(req: PreviewRequest):
         for a, b in rd:
             matches.append((mid, a, b))
             mid += 1
+
+    # ── 2b. Auto-populate courts/time_slots from facility if not explicitly set ──
+    resolved_facility_id = None
+    if not req.courts or not req.time_slots:
+        if req.facility_id:
+            from cincy_csl.api.db import Facility
+            facility = session.get(Facility, req.facility_id)
+            if facility and facility.default_courts and facility.default_time_slots:
+                fcourts = [c.strip() for c in facility.default_courts.split(",") if c.strip()]
+                fslots  = [s.strip() for s in facility.default_time_slots.split(",") if s.strip()]
+                if not req.courts and fcourts:
+                    req.courts = fcourts
+                if not req.time_slots and fslots:
+                    req.time_slots = fslots
+                resolved_facility_id = req.facility_id
 
     # ── 3. Capacity stats ─────────────────────────────────────────────────────
     courts_list   = req.courts or []
@@ -214,6 +230,7 @@ def preview_schedule(req: PreviewRequest):
         "total_matches":    total_matches,
         "min_weeks_needed": min_weeks_needed,
         "slots_blocked":    slots_blocked,
+        "facility_id":      resolved_facility_id,
     }
     for m in matches:
         mid = m[0]
@@ -225,7 +242,8 @@ def preview_schedule(req: PreviewRequest):
         else:
             s = next(s for s in slots if s[0] == assigned_slot)
             result["assigned"].append(
-                {**entry, "datetime": s[1].isoformat(), "court_id": s[2], "court": str(s[2])}
+                {**entry, "datetime": s[1].isoformat(), "court_id": s[2], "court": str(s[2]),
+                 "facility_id": resolved_facility_id}
             )
 
     return result
@@ -439,6 +457,7 @@ def get_schedules(league_id: int, day: Optional[int] = Query(None)):
             "datetime": m.datetime.isoformat() if m.datetime else None,
             "court": m.court,
             "court_id": m.court_id,
+            "facility_id": m.facility_id,
             "status": m.status,
         })
 
@@ -501,6 +520,7 @@ class CommitMatchEntry(BaseModel):
     away: str
     datetime: Optional[str] = None
     court: Optional[str] = None
+    facility_id: Optional[int] = None
 
 
 class CommitScheduleRequest(BaseModel):
@@ -572,6 +592,7 @@ def commit_schedule(req: CommitScheduleRequest):
             datetime=dt_val,
             court=m.court,
             court_id=court_id,
+            facility_id=m.facility_id,
             status="scheduled",
         ))
         saved += 1
@@ -605,6 +626,7 @@ def api_all_matches():
             "datetime": m.datetime.isoformat(),
             "court": m.court,
             "court_id": m.court_id,
+            "facility_id": m.facility_id,
             "status": m.status,
             "league_id": league.id,
             "league_name": league.name,
