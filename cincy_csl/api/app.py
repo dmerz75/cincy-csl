@@ -514,7 +514,7 @@ def commit_schedule(req: CommitScheduleRequest):
     """Persist a previewed schedule to the DB exactly as shown."""
     engine = create_engine(_DB_URL)
     session = get_session(engine)
-    from cincy_csl.api.db import League, Team, Match as MatchModel
+    from cincy_csl.api.db import League, Team, Court, Match as MatchModel
 
     league = session.get(League, req.league_id)
     if not league:
@@ -553,6 +553,10 @@ def commit_schedule(req: CommitScheduleRequest):
     all_teams = session.query(Team).filter_by(league_id=req.league_id).all()
     team_map = {t.name: t.id for t in all_teams}
 
+    # Load courts table for name → id resolution
+    all_courts = session.query(Court).all()
+    court_map = {c.name: c.id for c in all_courts}
+
     saved = 0
     for m in req.matches:
         home_id = team_map.get(m.home)
@@ -560,11 +564,14 @@ def commit_schedule(req: CommitScheduleRequest):
         if not home_id or not away_id:
             continue
         dt_val = datetime.fromisoformat(m.datetime.replace('Z','+00:00')) if m.datetime else None
+        # Resolve court string like "Court 5" to its court_id FK
+        court_id = court_map.get(m.court) if m.court else None
         session.add(MatchModel(
             home_team_id=home_id,
             away_team_id=away_id,
             datetime=dt_val,
             court=m.court,
+            court_id=court_id,
             status="scheduled",
         ))
         saved += 1

@@ -5,7 +5,7 @@ __pycache__/
 *.py[cod]
 
 # Env / secrets
-.env
+.env*
 
 # Node/build (if later)
 node_modules/
