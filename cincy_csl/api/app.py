@@ -604,6 +604,180 @@ def api_all_matches():
         })
     return out
 
+@app.get("/api/admin/slot_grid")
+def api_slot_grid(facility_id: Optional[int] = Query(None), weeks: int = Query(8)):
+    """Return all time slots organized by day with match occupancy data for the Day Grid view."""
+    from cincy_csl.api.db import Court, CourtAvailability, Match, Team, League, Facility
+    engine = create_engine(_DB_URL)
+    session = get_session(engine)
+
+    # 1. Resolve facility
+    if facility_id:
+        facility = session.get(Facility, facility_id)
+        if not facility:
+            raise HTTPException(status_code=404, detail="Facility not found")
+    else:
+        facility = session.query(Facility).first()
+        if not facility:
+            raise HTTPException(status_code=404, detail="No facilities found")
+
+    # 2. Get court names from facility.default_courts
+    court_names = [c.strip() for c in (facility.default_courts or "").split(",") if c.strip()]
+    if not court_names:
+        raise HTTPException(status_code=400, detail="Facility has no courts configured")
+
+    # 3. Map court names to IDs from courts table
+    courts = session.query(Court).filter(Court.name.in_(court_names)).all()
+    if not courts:
+        raise HTTPException(status_code=400, detail="No courts found in database matching facility courts")
+    court_ids = [c.id for c in courts]
+    court_id_to_name = {c.id: c.name for c in courts}
+
+    # 4. Get CourtAvailability rows for those courts (recurring=1)
+    availabilities = session.query(CourtAvailability).filter(
+        CourtAvailability.court_id.in_(court_ids),
+        CourtAvailability.recurring == 1
+    ).all()
+
+    # 5. Build set of all time slots across all courts
+    # 6. Build lookup: for each court, which time slots it has
+    all_time_slots = set()
+    court_times_map = {}
+    target_weekday = None
+
+    for ca in availabilities:
+        ts = ca.start_time
+        all_time_slots.add(ts)
+        if ca.court_id not in court_times_map:
+            court_times_map[ca.court_id] = set()
+        court_times_map[ca.court_id].add(ts)
+        if target_weekday is None:
+            target_weekday = ca.weekday
+
+    # Fallback if no CourtAvailability rows — use facility defaults
+    if not availabilities:
+        default_slots = [s.strip() for s in (facility.default_time_slots or "").split(",") if s.strip()]
+        if not default_slots:
+            raise HTTPException(status_code=400, detail="No time slots configured for facility")
+        all_time_slots = set(default_slots)
+        target_weekday = 0  # Default to Monday
+        for cid in court_ids:
+            court_times_map[cid] = set(default_slots)
+
+    all_time_slots = sorted(all_time_slots)
+    court_times_out = {str(cid): sorted(court_times_map.get(cid, set())) for cid in court_ids}
+
+    # 7. Generate days starting from next occurrence of target weekday
+    now = datetime.now(timezone.utc)
+    today_wd = now.weekday()
+    days_ahead = (target_weekday - today_wd) % 7
+    if days_ahead == 0:
+        days_ahead = 7  # Next week if today is the target day
+    first_day = (now + timedelta(days=days_ahead)).replace(hour=0, minute=0, second=0, microsecond=0)
+    date_range_end = first_day + timedelta(weeks=weeks)
+
+    # 9. Query existing Match rows within the date range
+    existing_matches = session.query(Match).filter(
+        Match.court_id.in_(court_ids),
+        Match.datetime >= first_day,
+        Match.datetime < date_range_end,
+        Match.datetime.isnot(None)
+    ).all()
+
+    # Build booked lookup: (date_iso, court_id, time) -> match_info
+    booked = {}
+    for m in existing_matches:
+        dt = m.datetime
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        date_key = dt.date().isoformat()
+        time_key = f"{dt.hour:02d}:{dt.minute:02d}"
+
+        home_team = session.get(Team, m.home_team_id)
+        away_team = session.get(Team, m.away_team_id)
+        league = None
+        if home_team and home_team.league_id:
+            league = session.get(League, home_team.league_id)
+
+        booked[(date_key, m.court_id, time_key)] = {
+            "match_id": m.id,
+            "home": home_team.name if home_team else "?",
+            "away": away_team.name if away_team else "?",
+            "league_id": league.id if league else None,
+            "league_name": league.name if league else None,
+            "status": m.status,
+        }
+
+    DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+    # 8+10. For each day, generate (court, time) cells with match info
+    days = []
+    for w in range(weeks):
+        day_date = first_day + timedelta(weeks=w)
+        date_iso = day_date.date().isoformat()
+
+        slots_arr = []
+        booked_count = 0
+        total_count = 0
+
+        for cid in court_ids:
+            cname = court_id_to_name.get(cid, str(cid))
+            available_times = court_times_map.get(cid, set())
+
+            for ts in all_time_slots:
+                total_count += 1
+                cell_available = ts in available_times
+                match_info = booked.get((date_iso, cid, ts))
+
+                if match_info:
+                    booked_count += 1
+                    slots_arr.append({
+                        "court_id": cid,
+                        "court_name": cname,
+                        "time": ts,
+                        "status": "booked",
+                        "match": match_info,
+                    })
+                elif cell_available:
+                    slots_arr.append({
+                        "court_id": cid,
+                        "court_name": cname,
+                        "time": ts,
+                        "status": "available",
+                        "match": None,
+                    })
+                else:
+                    slots_arr.append({
+                        "court_id": cid,
+                        "court_name": cname,
+                        "time": ts,
+                        "status": "unavailable",
+                        "match": None,
+                    })
+
+        days.append({
+            "date": date_iso,
+            "day_name": DAY_NAMES[target_weekday] if 0 <= target_weekday < 7 else "",
+            "slots": slots_arr,
+            "booked": booked_count,
+            "total": total_count,
+        })
+
+    # Build facility info response
+    facility_info = {
+        "id": facility.id,
+        "name": facility.name,
+        "courts": [{"id": c.id, "name": c.name} for c in courts],
+    }
+
+    return {
+        "facility": facility_info,
+        "all_time_slots": all_time_slots,
+        "court_times": court_times_out,
+        "days": days,
+    }
+
+
 # If a built React app exists at web/dist, serve it at /admin (static)
 if dist_dir.exists():
     app.mount("/admin", StaticFiles(directory=str(dist_dir), html=True), name="admin")

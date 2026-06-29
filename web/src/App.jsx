@@ -861,6 +861,150 @@ export default function App(){
       </div>
     )
   }
+  // ── Day Grid View ────────────────────────────────────────────────────────────
+  function DayGridView({ apiBase }) {
+    const [facilities, setFacilities] = useState([])
+    const [facilityId, setFacilityId] = useState('')
+    const [weeksDg, setWeeksDg] = useState(8)
+    const [loadingDg, setLoadingDg] = useState(false)
+    const [errDg, setErrDg] = useState(null)
+    const [gridData, setGridData] = useState(null)
+
+    useEffect(() => {
+      fetch(`${apiBase}/facilities`).then(r=>r.json())
+        .then(fs => { setFacilities(fs); if (fs.length) setFacilityId(String(fs[0].id)) })
+        .catch(() => {})
+    }, [])
+
+    async function loadGrid() {
+      if (!facilityId) return
+      setLoadingDg(true); setErrDg(null); setGridData(null)
+      try {
+        const params = new URLSearchParams({ weeks: String(weeksDg) })
+        if (facilityId) params.append('facility_id', facilityId)
+        const resp = await fetch(`${apiBase}/slot_grid?${params}`)
+        if (!resp.ok) throw new Error(await resp.text())
+        setGridData(await resp.json())
+      } catch (e) { setErrDg(String(e)) }
+      setLoadingDg(false)
+    }
+
+    function fmtTime(ts) {
+      const [h, m] = ts.split(':').map(Number)
+      return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`
+    }
+
+    // Build the lookup from league_id to league color
+    function leagueColorFor(lid) { return LEAGUE_COLORS[(Number(lid)-1) % LEAGUE_COLORS.length] }
+
+    // Group flat slots into rows per time for a day
+    function buildGrid(slots, courts, allTimeSlots) {
+      // Create a map: (time, court_id) -> slot
+      const cellMap = {}
+      for (const s of slots) {
+        cellMap[`${s.time}|${s.court_id}`] = s
+      }
+      // Build rows
+      return allTimeSlots.map(ts => ({
+        time: ts,
+        cells: courts.map(c => cellMap[`${ts}|${c.id}`] || { status: 'unavailable', court_id: c.id, court_name: c.name, time: ts, match: null })
+      }))
+    }
+
+    return (
+      <div>
+        <div className="cal-toolbar" style={{flexWrap:'wrap',gap:8}}>
+          <label>Facility
+            <select value={facilityId} onChange={e=>setFacilityId(e.target.value)}>
+              {facilities.length === 0 && <option value="">— no facilities —</option>}
+              {facilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+            </select>
+          </label>
+          <label>Weeks
+            <select value={weeksDg} onChange={e=>setWeeksDg(Number(e.target.value))}>
+              {[4,5,6,7,8,9,10,11,12].map(n => <option key={n} value={n}>{n} weeks</option>)}
+            </select>
+          </label>
+          <button onClick={loadGrid} disabled={loadingDg||!facilityId}>
+            {loadingDg ? 'Loading…' : '📋 Load Grid'}
+          </button>
+        </div>
+
+        {errDg && <div className="error">{errDg}</div>}
+        {!loadingDg && !gridData && (
+          <div className="cal-empty">Select a facility and click "📋 Load Grid" to view the day grid.</div>
+        )}
+
+        {gridData && (
+          <>
+            <div style={{marginBottom:10,color:'#94a3b8',fontSize:'0.85rem'}}>
+              🏟 {gridData.facility.name} — {gridData.days.length} {gridData.days.length === 1 ? 'day' : 'days'}
+            </div>
+
+            {gridData.days.map(day => {
+              const grid = buildGrid(day.slots, gridData.facility.courts, gridData.all_time_slots)
+              const dayLabel = `${day.day_name}, ${new Date(day.date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`
+
+              return (
+                <div key={day.date} className="day-grid">
+                  <div className="day-grid-header">
+                    <span>📅 {dayLabel}</span>
+                    <span className="day-grid-count">
+                      {day.booked} booked / {day.total} total
+                    </span>
+                  </div>
+                  <div className="day-grid-scroll">
+                    <table className="day-grid-table">
+                      <thead>
+                        <tr>
+                          <th className="day-grid-corner">Time</th>
+                          {gridData.facility.courts.map(c => (
+                            <th key={c.id} className="day-grid-court-header">🏐 {c.name}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {grid.map(row => (
+                          <tr key={row.time}>
+                            <td className="day-grid-time">{fmtTime(row.time)}</td>
+                            {row.cells.map(cell => {
+                              if (cell.status === 'booked' && cell.match) {
+                                const col = leagueColorFor(cell.match.league_id)
+                                return (
+                                  <td key={`${cell.court_id}-${cell.time}`} className="day-grid-cell">
+                                    <div className="day-grid-match" style={{background:col.bg,color:col.fg}}>
+                                      <div className="dgm-league">{cell.match.league_name}</div>
+                                      <div className="dgm-teams">{cell.match.home} vs {cell.match.away}</div>
+                                    </div>
+                                  </td>
+                                )
+                              } else if (cell.status === 'available') {
+                                return (
+                                  <td key={`${cell.court_id}-${cell.time}`} className="day-grid-cell">
+                                    <div className="day-grid-available">Available</div>
+                                  </td>
+                                )
+                              } else {
+                                return (
+                                  <td key={`${cell.court_id}-${cell.time}`} className="day-grid-cell">
+                                    <span className="day-grid-empty">—</span>
+                                  </td>
+                                )
+                              }
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )
+            })}
+          </>
+        )}
+      </div>
+    )
+  }
   // ─────────────────────────────────────────────────────────────────────────────
 
   function SchedulesView({apiBase}){
@@ -1016,6 +1160,7 @@ export default function App(){
               <div className="nav">
                 <button onClick={()=>setView('facilities')} className={view==='facilities'?'active':''}>🏟 Facilities</button>
                 <button onClick={()=>setView('courts')} className={view==='courts'?'active':''}>🗺 Court View</button>
+                <button onClick={()=>setView('daygrid')} className={view==='daygrid'?'active':''}>📋 Day Grid</button>
                 <button onClick={()=>setView('calendar')} className={view==='calendar'?'active':''}>📅 Calendar</button>
                 <button onClick={()=>setView('preview')} className={view==='preview'?'active':''}>🗓 Schedule Builder</button>
                 <button onClick={()=>setView('schedules')} className={view==='schedules'?'active':''}>Current Schedules</button>
@@ -1027,6 +1172,9 @@ export default function App(){
         )}
                 {view === 'courts' && (
         <CourtView apiBase={API_BASE} />
+        )}
+                {view === 'daygrid' && (
+        <DayGridView apiBase={API_BASE} />
         )}
                 {view === 'calendar' && (
         <WeeklyCalendar apiBase={API_BASE} />
