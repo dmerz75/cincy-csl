@@ -234,13 +234,13 @@ export default function App(){
         const url = facilityMode === 'edit' ? `${apiBase}/facilities/${facilityId}` : `${apiBase}/facilities`
         const method = facilityMode === 'edit' ? 'PUT' : 'POST'
         const resp = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) })
-        if (!resp.ok) throw new Error(await resp.text())
+        if (!resp.ok) { const text = await resp.text(); throw new Error(`HTTP ${resp.status}: ${text || '(no body)'}`) }
         const saved = await resp.json()
         await loadFacilities()
         setFacilityId(String(saved.id))
         setCourts(saved.default_courts); setSlots(saved.default_time_slots)
         setShowFacilityForm(false)
-      } catch(e) { setFErr(String(e)) }
+      } catch(e) { console.error('saveFacility error:', e); setFErr(e.message || String(e)) }
       setFSaving(false)
     }
 
@@ -451,7 +451,7 @@ export default function App(){
             </div>
             <div style={{flex:1, minWidth:0}}>
               <section className="builder-section">
-              <h3>League &amp; Date Range</h3>
+              <h3>Create League</h3>
               <label>League
                 <div style={{display:'flex',gap:6,alignItems:'center'}}>
                   <select value={league} onChange={e=>setLeague(e.target.value)} style={{flex:1}}>
