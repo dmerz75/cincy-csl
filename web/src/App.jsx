@@ -362,38 +362,30 @@ export default function App(){
       } catch(e) { setSaveMsg(`❌ ${String(e)}`) }
       setSaving(false)
     }
-    const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-    function fmtDt(iso){ const d=new Date(iso); const h=d.getUTCHours(),m=d.getUTCMinutes(),ap=h>=12?'PM':'AM'; return `${DAY[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]} · ${h%12||12}:${String(m).padStart(2,'0')} ${ap}` }
-
-    // Group result by week
-    function isoMon(iso){ const dt=new Date(iso),day=dt.getUTCDay(),diff=day===0?-6:1-day,m=new Date(dt); m.setUTCDate(dt.getUTCDate()+diff); return m.toISOString().slice(0,10) }
-    function weekLbl(w){ const d=new Date(w); return `Week of ${DAY[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]}` }
-    const grouped = result ? Object.entries(
-      result.assigned.reduce((acc,m)=>{ const k=isoMon(m.datetime); (acc[k]=acc[k]||[]).push(m); return acc },{})
-    ).sort(([a],[b])=>a.localeCompare(b)) : []
-
     return (
       <div>
         <div className="builder-grid">
           {/* Left column: config */}
           <div className="builder-col">
-            <section className="builder-section">
-              <h3>Facility</h3>
-              <label>Select facility
-                <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                  <select value={facilityId} onChange={e=>{ setFacilityId(e.target.value); applyFacility(e.target.value) }} style={{flex:1}}>
-                    <option value="">— none —</option>
-                    {facilities.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
-                  </select>
-                  <button className="chip" style={{whiteSpace:'nowrap'}} onClick={openNewFacility}>+ New</button>
-                  {facilityId && <button className="chip" style={{whiteSpace:'nowrap'}} onClick={openEditFacility}>✏️ Edit</button>}
-                </div>
-              </label>
-              {facilityId && !showFacilityForm && (() => {
-                const f = facilities.find(x=>String(x.id)===String(facilityId))
-                return f ? <div style={{fontSize:'0.82rem',color:'#94a3b8',marginTop:4}}>{f.address && <span>📍 {f.address} · </span>}{f.default_courts.length} courts · {f.default_time_slots.length} slots</div> : null
-              })()}
-              {showFacilityForm && (
+            <div style={{display:'flex', flexDirection:'row', gap:16, alignItems:'flex-start'}}>
+              <div style={{flex:1, minWidth:0}}>
+                <section className="builder-section">
+                  <h3>Facility</h3>
+                  <label>Select facility
+                    <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                      <select value={facilityId} onChange={e=>{ setFacilityId(e.target.value); applyFacility(e.target.value) }} style={{flex:1}}>
+                        <option value="">— none —</option>
+                        {facilities.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
+                      </select>
+                      <button className="chip" style={{whiteSpace:'nowrap'}} onClick={openNewFacility}>+ New</button>
+                      {facilityId && <button className="chip" style={{whiteSpace:'nowrap'}} onClick={openEditFacility}>✏️ Edit</button>}
+                    </div>
+                  </label>
+                  {facilityId && !showFacilityForm && (() => {
+                    const f = facilities.find(x=>String(x.id)===String(facilityId))
+                    return f ? <div style={{fontSize:'0.82rem',color:'#94a3b8',marginTop:4}}>{f.address && <span>📍 {f.address} · </span>}{f.default_courts.length} courts · {f.default_time_slots.length} slots</div> : null
+                  })()}
+                  {showFacilityForm && (
                 <div className="create-league-box" style={{marginTop:10}}>
                   <div className="clb-title">{facilityMode==='edit' ? '✏️ Edit Facility' : '🏟 New Facility'}</div>
                   <label style={{marginBottom:4}}>Name
@@ -434,8 +426,31 @@ export default function App(){
                 </div>
               )}
             </section>
-
-            <section className="builder-section">
+            </div>
+            <div style={{flex:1, minWidth:0}}>
+              <section className="builder-section">
+              <h3>Courts <button className="chip" onClick={addCourt}>+ Add</button></h3>
+              {courts.map((c,i)=>(
+                <div key={i} className="builder-row">
+                  <input value={c} onChange={e=>editCourt(i,e.target.value)} placeholder="Court name" />
+                  <button className="btn-remove" onClick={()=>removeCourt(i)} disabled={courts.length===1}>✕</button>
+                </div>
+              ))}
+            </section>
+            </div>
+            <div style={{flex:1, minWidth:0}}>
+              <section className="builder-section">
+              <h3>Time Slots <button className="chip" onClick={addSlot}>+ Add</button></h3>
+              {slots.map((s,i)=>(
+                <div key={i} className="builder-row">
+                  <input type="time" value={s} onChange={e=>editSlot(i,e.target.value)} />
+                  <button className="btn-remove" onClick={()=>removeSlot(i)} disabled={slots.length===1}>✕</button>
+                </div>
+              ))}
+            </section>
+            </div>
+            <div style={{flex:1, minWidth:0}}>
+              <section className="builder-section">
               <h3>League &amp; Date Range</h3>
               <label>League
                 <div style={{display:'flex',gap:6,alignItems:'center'}}>
@@ -497,26 +512,8 @@ export default function App(){
                 </select>
               </label>
             </section>
-
-            <section className="builder-section">
-              <h3>Courts <button className="chip" onClick={addCourt}>+ Add</button></h3>
-              {courts.map((c,i)=>(
-                <div key={i} className="builder-row">
-                  <input value={c} onChange={e=>editCourt(i,e.target.value)} placeholder="Court name" />
-                  <button className="btn-remove" onClick={()=>removeCourt(i)} disabled={courts.length===1}>✕</button>
-                </div>
-              ))}
-            </section>
-
-            <section className="builder-section">
-              <h3>Time Slots <button className="chip" onClick={addSlot}>+ Add</button></h3>
-              {slots.map((s,i)=>(
-                <div key={i} className="builder-row">
-                  <input type="time" value={s} onChange={e=>editSlot(i,e.target.value)} />
-                  <button className="btn-remove" onClick={()=>removeSlot(i)} disabled={slots.length===1}>✕</button>
-                </div>
-              ))}
-            </section>
+            </div>
+            </div>
 
             <button onClick={generate} disabled={loading||!league} style={{width:'100%',marginTop:8,padding:'10px 0',fontSize:'1rem'}}>
               {loading ? 'Generating…' : '⚡ Generate Schedule'}
@@ -528,53 +525,7 @@ export default function App(){
             {err && <div className="error" style={{marginTop:8}}>{err}</div>}
           </div>
 
-          {/* Right column: results */}
-          <div className="builder-results">
-            {!result && !loading && <div className="cal-empty">Configure options and click Generate.</div>}
-            {result && (
-              <>
-                <div className="builder-summary">
-                  <span className="summary-chip assigned">✅ {result.assigned.length} assigned</span>
-                  {result.unassigned.length > 0 && <span className="summary-chip unassigned">⚠️ {result.unassigned.length} unassigned</span>}
-                  <span className="summary-chip">{result.total_matches} total matches · {result.capacity_per_week} slots/week · {weeks} weeks</span>
-                  {result.slots_blocked > 0 && (
-                    <span className="summary-chip" style={{background:'#7c3aed'}}>🔒 {result.slots_blocked} slots blocked by other leagues</span>
-                  )}
-                  {result.min_weeks_needed > Number(weeks) && (
-                    <span className="summary-chip unassigned">📅 Need at least {result.min_weeks_needed} weeks to fit all matches</span>
-                  )}
-                  {result.min_weeks_needed <= Number(weeks) && result.capacity_per_week > 0 && (
-                    <span className="summary-chip" style={{background:'#166534'}}>✓ Facility fits schedule</span>
-                  )}
-                </div>
-                {grouped.map(([monday, ms])=>(
-                  <div key={monday} className="week-card">
-                    <div className="week-header">{weekLbl(monday)} <span className="week-count">{ms.length} match{ms.length!==1?'es':''}</span></div>
-                    <div className="match-grid">
-                      {ms.sort((a,b)=>a.datetime.localeCompare(b.datetime)).map(m=>(
-                        <div key={m.id} className="match-pill">
-                          <div className="match-date">{fmtDt(m.datetime)}</div>
-                          <div className="match-teams">
-                            <span className="team home">{m.home}</span>
-                            <span className="vs">vs</span>
-                            <span className="team away">{m.away}</span>
-                          </div>
-                          {m.court && <div className="court-badge">🏐 {m.court}</div>}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-                {result.unassigned.length > 0 && (
-                  <div className="week-card" style={{borderColor:'#fbbf24'}}>
-                    <div className="week-header" style={{background:'#d97706'}}>⚠️ Unassigned ({result.unassigned.length})</div>
-                    <table style={{margin:'12px'}}><thead><tr><th>Home</th><th>Away</th></tr></thead>
-                    <tbody>{result.unassigned.map(u=><tr key={u.id}><td>{u.home}</td><td>{u.away}</td></tr>)}</tbody></table>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+          
         </div>
       </div>
     )
@@ -741,8 +692,8 @@ export default function App(){
     const [editingId, setEditingId] = useState(null) // null = none, 0 = new
     const [fName, setFName] = useState('')
     const [fAddress, setFAddress] = useState('')
-    const [fCourts, setFCourts] = useState(['Court 1','Court 2'])
-    const [fSlots, setFSlots] = useState(['18:00','19:00','20:00'])
+    const [fCourts, setFCourts] = useState(['Court 1','Court 2','Court 3','Court 4','Court 5','Court 6','Court 7'])
+    const [fSlots, setFSlots] = useState(['06:00','07:00','08:00','09:00','10:00'])
     const [saving, setSaving] = useState(false)
     const [err, setErr] = useState(null)
 
@@ -754,13 +705,13 @@ export default function App(){
     useEffect(() => { load() }, [])
 
     function openNew() {
-      setFName(''); setFAddress(''); setFCourts(['Court 1','Court 2']); setFSlots(['18:00','19:00','20:00'])
+      setFName(''); setFAddress(''); setFCourts(['Court 1','Court 2','Court 3','Court 4','Court 5','Court 6','Court 7']); setFSlots(['06:00','07:00','08:00','09:00','10:00'])
       setErr(null); setEditingId(0)
     }
     function openEdit(f) {
       setFName(f.name); setFAddress(f.address||'')
       setFCourts(f.default_courts.length ? [...f.default_courts] : ['Court 1'])
-      setFSlots(f.default_time_slots.length ? [...f.default_time_slots] : ['18:00'])
+      setFSlots(f.default_time_slots.length ? [...f.default_time_slots] : ['06:00'])
       setErr(null); setEditingId(f.id)
     }
     function cancel() { setEditingId(null) }

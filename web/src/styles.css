@@ -13,6 +13,7 @@ body{font-family:Inter, Arial, sans-serif;margin:0;background:linear-gradient(18
 .app-header p{margin:4px 0 0;opacity:0.95;font-size:0.95rem}
 
 .container{max-width:900px;margin:20px auto;padding:18px;background:#fff;border-radius:10px;box-shadow:0 6px 18px rgba(11,99,206,0.08)}
+.container:has(.builder-grid){max-width:1200px}
 .controls{display:flex;gap:12px;align-items:center}
 .controls label{display:flex;gap:6px;align-items:center}
 
@@ -60,7 +61,7 @@ footer small{color:#6b7280}
 .week-count{font-size:0.78rem;font-weight:400;opacity:0.8;margin-left:8px}
 
 /* ── Schedule Builder ─────────────────────────────────────── */
-.builder-grid{display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:start}
+.builder-grid{display:grid;grid-template-columns:1fr;gap:20px;align-items:start}
 @media(max-width:700px){.builder-grid{grid-template-columns:1fr}}
 .builder-col{display:flex;flex-direction:column;gap:0}
 .builder-section{border:1px solid #dde8ff;border-radius:10px;padding:14px 16px;margin-bottom:14px;background:var(--muted)}
