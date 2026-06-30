@@ -378,6 +378,64 @@ export default function App(){
           {/* Left column: config */}
           <div className="builder-col">
             <section className="builder-section">
+              <h3>Facility</h3>
+              <label>Select facility
+                <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                  <select value={facilityId} onChange={e=>{ setFacilityId(e.target.value); applyFacility(e.target.value) }} style={{flex:1}}>
+                    <option value="">— none —</option>
+                    {facilities.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
+                  </select>
+                  <button className="chip" style={{whiteSpace:'nowrap'}} onClick={openNewFacility}>+ New</button>
+                  {facilityId && <button className="chip" style={{whiteSpace:'nowrap'}} onClick={openEditFacility}>✏️ Edit</button>}
+                </div>
+              </label>
+              {facilityId && !showFacilityForm && (() => {
+                const f = facilities.find(x=>String(x.id)===String(facilityId))
+                return f ? <div style={{fontSize:'0.82rem',color:'#94a3b8',marginTop:4}}>{f.address && <span>📍 {f.address} · </span>}{f.default_courts.length} courts · {f.default_time_slots.length} slots</div> : null
+              })()}
+              {showFacilityForm && (
+                <div className="create-league-box" style={{marginTop:10}}>
+                  <div className="clb-title">{facilityMode==='edit' ? '✏️ Edit Facility' : '🏟 New Facility'}</div>
+                  <label style={{marginBottom:4}}>Name
+                    <input value={fName} onChange={e=>setFName(e.target.value)} placeholder="e.g. Sportsman's" />
+                  </label>
+                  <label style={{marginBottom:8}}>Address
+                    <input value={fAddress} onChange={e=>setFAddress(e.target.value)} placeholder="e.g. 123 Main St" />
+                  </label>
+                  <div className="clb-row" style={{alignItems:'flex-start',gap:12}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:600,marginBottom:4}}>Courts</div>
+                      {fCourts.map((c,i)=>(
+                        <div key={i} className="builder-row">
+                          <input value={c} onChange={e=>{ const a=[...fCourts]; a[i]=e.target.value; setFCourts(a) }} placeholder="Court name" />
+                          <button className="btn-remove" onClick={()=>setFCourts(fCourts.filter((_,j)=>j!==i))} disabled={fCourts.length===1}>✕</button>
+                        </div>
+                      ))}
+                      <button className="chip" onClick={()=>setFCourts([...fCourts,`Court ${fCourts.length+1}`])}>+ Add</button>
+                    </div>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:600,marginBottom:4}}>Time Slots</div>
+                      {fSlots.map((s,i)=>(
+                        <div key={i} className="builder-row">
+                          <input type="time" value={s} onChange={e=>{ const a=[...fSlots]; a[i]=e.target.value; setFSlots(a) }} />
+                          <button className="btn-remove" onClick={()=>setFSlots(fSlots.filter((_,j)=>j!==i))} disabled={fSlots.length===1}>✕</button>
+                        </div>
+                      ))}
+                      <button className="chip" onClick={()=>setFSlots([...fSlots,'18:00'])}>+ Add</button>
+                    </div>
+                  </div>
+                  {fErr && <div className="error" style={{fontSize:'0.82rem',marginTop:6}}>{fErr}</div>}
+                  <div style={{display:'flex',gap:8,marginTop:8}}>
+                    <button onClick={saveFacility} disabled={fSaving||!fName.trim()} style={{flex:1}}>
+                      {fSaving ? 'Saving…' : `💾 Save`}
+                    </button>
+                    <button className="chip" onClick={()=>setShowFacilityForm(false)}>✕ Cancel</button>
+                  </div>
+                </div>
+              )}
+            </section>
+
+            <section className="builder-section">
               <h3>League &amp; Date Range</h3>
               <label>League
                 <div style={{display:'flex',gap:6,alignItems:'center'}}>
@@ -438,64 +496,6 @@ export default function App(){
                   {DAYS.map((d,i)=><option key={i} value={i}>{d}</option>)}
                 </select>
               </label>
-            </section>
-
-            <section className="builder-section">
-              <h3>Facility</h3>
-              <label>Select facility
-                <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                  <select value={facilityId} onChange={e=>{ setFacilityId(e.target.value); applyFacility(e.target.value) }} style={{flex:1}}>
-                    <option value="">— none —</option>
-                    {facilities.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
-                  </select>
-                  <button className="chip" style={{whiteSpace:'nowrap'}} onClick={openNewFacility}>+ New</button>
-                  {facilityId && <button className="chip" style={{whiteSpace:'nowrap'}} onClick={openEditFacility}>✏️ Edit</button>}
-                </div>
-              </label>
-              {facilityId && !showFacilityForm && (() => {
-                const f = facilities.find(x=>String(x.id)===String(facilityId))
-                return f ? <div style={{fontSize:'0.82rem',color:'#94a3b8',marginTop:4}}>{f.address && <span>📍 {f.address} · </span>}{f.default_courts.length} courts · {f.default_time_slots.length} slots</div> : null
-              })()}
-              {showFacilityForm && (
-                <div className="create-league-box" style={{marginTop:10}}>
-                  <div className="clb-title">{facilityMode==='edit' ? '✏️ Edit Facility' : '🏟 New Facility'}</div>
-                  <label style={{marginBottom:4}}>Name
-                    <input value={fName} onChange={e=>setFName(e.target.value)} placeholder="e.g. Sportsman's" />
-                  </label>
-                  <label style={{marginBottom:8}}>Address
-                    <input value={fAddress} onChange={e=>setFAddress(e.target.value)} placeholder="e.g. 123 Main St" />
-                  </label>
-                  <div className="clb-row" style={{alignItems:'flex-start',gap:12}}>
-                    <div style={{flex:1}}>
-                      <div style={{fontWeight:600,marginBottom:4}}>Courts</div>
-                      {fCourts.map((c,i)=>(
-                        <div key={i} className="builder-row">
-                          <input value={c} onChange={e=>{ const a=[...fCourts]; a[i]=e.target.value; setFCourts(a) }} placeholder="Court name" />
-                          <button className="btn-remove" onClick={()=>setFCourts(fCourts.filter((_,j)=>j!==i))} disabled={fCourts.length===1}>✕</button>
-                        </div>
-                      ))}
-                      <button className="chip" onClick={()=>setFCourts([...fCourts,`Court ${fCourts.length+1}`])}>+ Add</button>
-                    </div>
-                    <div style={{flex:1}}>
-                      <div style={{fontWeight:600,marginBottom:4}}>Time Slots</div>
-                      {fSlots.map((s,i)=>(
-                        <div key={i} className="builder-row">
-                          <input type="time" value={s} onChange={e=>{ const a=[...fSlots]; a[i]=e.target.value; setFSlots(a) }} />
-                          <button className="btn-remove" onClick={()=>setFSlots(fSlots.filter((_,j)=>j!==i))} disabled={fSlots.length===1}>✕</button>
-                        </div>
-                      ))}
-                      <button className="chip" onClick={()=>setFSlots([...fSlots,'18:00'])}>+ Add</button>
-                    </div>
-                  </div>
-                  {fErr && <div className="error" style={{fontSize:'0.82rem',marginTop:6}}>{fErr}</div>}
-                  <div style={{display:'flex',gap:8,marginTop:8}}>
-                    <button onClick={saveFacility} disabled={fSaving||!fName.trim()} style={{flex:1}}>
-                      {fSaving ? 'Saving…' : `💾 Save`}
-                    </button>
-                    <button className="chip" onClick={()=>setShowFacilityForm(false)}>✕ Cancel</button>
-                  </div>
-                </div>
-              )}
             </section>
 
             <section className="builder-section">
